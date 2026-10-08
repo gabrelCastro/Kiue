@@ -29,9 +29,9 @@ export function connectionError(g: Graph, fromId: string, toId: string): string 
     case 'topic':
       if (to.kind !== 'queue')
         return 'Neste jogo o SNS entrega para filas SQS. (Na AWS ele também entrega para Lambda, HTTP, e-mail, SMS…)';
-      if (from.config.fifo && !(to as GraphNode<'queue'>).config.fifo)
+      if ((from as GraphNode<'topic'>).config.fifo && !(to as GraphNode<'queue'>).config.fifo)
         return 'Tópico SNS FIFO só aceita filas SQS FIFO como assinantes.';
-      if (!from.config.fifo && (to as GraphNode<'queue'>).config.fifo)
+      if (!(from as GraphNode<'topic'>).config.fifo && (to as GraphNode<'queue'>).config.fifo)
         return 'Fila FIFO só pode assinar tópico SNS FIFO. Mude o tópico para FIFO.';
       break;
     case 'queue':

@@ -790,22 +790,22 @@ const c6: Level = {
   graph: {
     nodes: [
       P('loja', 'Loja', -9, 0, { rate: 2, total: 45, groups: 3, dedupId: true, poisonRate: 0.08, types: LIVRO_ELETRO_ROUPA }),
-      C('fat', 'Faturamento', 9, -4, { processingTime: 0.4, jitter: 0.5, workers: 2 }),
+      C('fat', 'Faturamento', 9, -5, { processingTime: 0.4, jitter: 0.5, workers: 2 }),
       C('estoque', 'Estoque', 9, 0, { processingTime: 0.4, interest: ['eletronico', 'roupa'] }),
-      C('analytics', 'Analytics', 9, 4, { processingTime: 0.2 }),
+      C('analytics', 'Analytics', 9, 5, { processingTime: 0.2 }),
     ],
     edges: [],
   },
   solve: (g) => {
     add(g, T('t', 'pedidos.fifo', -4, 0, { fifo: true }));
     const subs: [string, string, string, number][] = [
-      ['qf', 'faturamento.fifo', 'fat', -4],
+      ['qf', 'faturamento.fifo', 'fat', -5],
       ['qe', 'estoque.fifo', 'estoque', 0],
-      ['qa', 'analytics.fifo', 'analytics', 4],
+      ['qa', 'analytics.fifo', 'analytics', 5],
     ];
     for (const [id, name, consumer, z] of subs) {
-      add(g, Q(`${id}-dlq`, name.replace('.fifo', '-dlq.fifo'), 4, z + 1.8, { fifo: true }));
-      add(g, Q(id, name, 2, z, { fifo: true, visibilityTimeout: 3, maxReceiveCount: 2, dlq: `${id}-dlq` }));
+      add(g, Q(`${id}-dlq`, name.replace('.fifo', '-dlq.fifo'), 1, z + 2, { fifo: true }));
+      add(g, Q(id, name, 3, z, { fifo: true, visibilityTimeout: 3, maxReceiveCount: 2, dlq: `${id}-dlq` }));
       link(g, 't', id, consumer === 'estoque' ? { tipo: ['eletronico', 'roupa'] } : undefined);
       link(g, id, consumer);
     }
