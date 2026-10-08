@@ -124,7 +124,7 @@ describe('visibility timeout e DLQ', () => {
     const sim = new Simulation(graph([queue('q', { visibilityTimeout: 1 })], []));
     const q = sim.queues.get('q')!;
     const ctx = (sim as unknown as { ctx: Parameters<typeof q.receive>[2] }).ctx;
-    q.enqueue({ copyId: 1, logicalId: 1, type: 'x', poison: false, groupId: null, seq: 1, dedupId: null, body: '', createdAt: 0, producerId: 'p' }, ctx, 0);
+    q.enqueue({ copyId: 1, logicalId: 1, type: 'x', poison: false, groupId: null, seq: 1, dedupId: null, body: '', createdAt: 0, producerId: 'p', sizeKb: 2, s3: false }, ctx, 0);
     const [m1] = q.receive(1, 'c', ctx, 0);
     const old = m1.receipt!;
     sim.advance(1100);

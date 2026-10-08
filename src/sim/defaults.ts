@@ -1,4 +1,4 @@
-import type { ConsumerConfig, ProducerConfig, QueueConfig, TopicConfig } from './types';
+import type { ConsumerConfig, LambdaConfig, ProducerConfig, QueueConfig, TopicConfig } from './types';
 
 /** Valores padrão que espelham os padrões da AWS quando faz sentido. */
 export function defaultQueue(over: Partial<QueueConfig> = {}): QueueConfig {
@@ -29,6 +29,8 @@ export function defaultConsumer(over: Partial<ConsumerConfig> = {}): ConsumerCon
     idempotent: false,
     interest: null,
     outages: [],
+    heartbeat: false,
+    httpOnly: false,
     ...over,
   };
 }
@@ -44,6 +46,25 @@ export function defaultProducer(over: Partial<ProducerConfig> = {}): ProducerCon
     groups: 0,
     dedupId: false,
     retryRate: 0,
+    largeRate: 0,
+    largeKb: 2048,
+    extendedClient: false,
+    ...over,
+  };
+}
+
+export function defaultLambda(over: Partial<LambdaConfig> = {}): LambdaConfig {
+  return {
+    batchSize: 10,
+    maxConcurrency: 0,
+    timeout: 10,
+    processingTime: 0.3,
+    jitter: 0.2,
+    failRate: 0,
+    idempotent: false,
+    interest: null,
+    reportBatchItemFailures: false,
+    dbLimit: 0,
     ...over,
   };
 }

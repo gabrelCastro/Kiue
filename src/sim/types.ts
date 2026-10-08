@@ -1,7 +1,7 @@
 // Modelo de dados da simulação. Tempos de configuração em segundos (como na AWS);
 // internamente o motor trabalha em milissegundos de jogo.
 
-export type NodeKind = 'producer' | 'topic' | 'queue' | 'consumer';
+export type NodeKind = 'producer' | 'topic' | 'queue' | 'consumer' | 'lambda';
 
 export interface ColorWeight {
   value: string; // valor do atributo "tipo"
@@ -24,6 +24,9 @@ export interface ProducerConfig {
   groups: number; // 0 = sem MessageGroupId
   dedupId: boolean; // envia MessageDeduplicationId
   retryRate: number; // 0..1 — probabilidade de reenviar (retry de rede)
+  largeRate: number; // 0..1 — fração de mensagens com anexo grande
+  largeKb: number; // tamanho das mensagens grandes
+  extendedClient: boolean; // payload grande vai para o S3 (Extended Client)
 }
 
 export interface TopicConfig {
@@ -56,6 +59,22 @@ export interface ConsumerConfig {
   idempotent: boolean;
   interest: string[] | null; // tipos que este consumidor deveria receber (null = todos)
   outages: Outage[];
+  heartbeat: boolean; // estende a visibilidade com ChangeMessageVisibility durante o processamento
+  httpOnly: boolean; // endpoint HTTP: só recebe push (ex.: do SNS), não lê filas
+}
+
+/** Função Lambda acionada por fila SQS (event source mapping). */
+export interface LambdaConfig {
+  batchSize: number; // 1..10 no jogo
+  maxConcurrency: number; // MaximumConcurrency; 0 = sem limite (teto do jogo)
+  timeout: number; // s
+  processingTime: number; // s por mensagem
+  jitter: number;
+  failRate: number;
+  idempotent: boolean;
+  interest: string[] | null;
+  reportBatchItemFailures: boolean;
+  dbLimit: number; // conexões que o banco aguenta; 0 = sem limite
 }
 
 export interface ConfigByKind {
@@ -63,6 +82,7 @@ export interface ConfigByKind {
   topic: TopicConfig;
   queue: QueueConfig;
   consumer: ConsumerConfig;
+  lambda: LambdaConfig;
 }
 
 export interface GraphNode<K extends NodeKind = NodeKind> {
@@ -88,6 +108,8 @@ export interface GraphEdge {
   to: string;
   locked?: boolean;
   filterPolicy?: FilterPolicy | null;
+  /** DLQ da assinatura SNS (RedrivePolicy da subscription). */
+  dlq?: string | null;
 }
 
 export interface Graph {
@@ -107,6 +129,8 @@ export interface Token {
   body: string;
   createdAt: number; // ms
   producerId: string;
+  sizeKb: number;
+  s3: boolean; // corpo é um ponteiro para o S3 (Extended Client)
 }
 
 export interface SimOptions {
@@ -145,6 +169,12 @@ export type SimEvent =
   | { t: number; type: 'wrong_delivery'; node: string; token: Token }
   | { t: number; type: 'process_failed'; node: string; token: Token; reason: 'poison' | 'error' | 'outage' }
   | { t: number; type: 'empty_receive'; node: string }
-  | { t: number; type: 'outage_start' | 'outage_end'; node: string };
+  | { t: number; type: 'outage_start' | 'outage_end'; node: string }
+  | { t: number; type: 'invocation_failed'; node: string; reason: 'error' | 'timeout' | 'db'; size: number }
+  | { t: number; type: 'scaled'; node: string; concurrency: number }
+  | { t: number; type: 'visibility_extended'; node: string; count: number }
+  | { t: number; type: 'sns_retry'; node: string; target: string; token: Token; attempt: number }
+  | { t: number; type: 'sns_dlq'; node: string; target: string; dlq: string; token: Token }
+  | { t: number; type: 's3_put'; node: string; token: Token };
 
 export type SimEventType = SimEvent['type'];

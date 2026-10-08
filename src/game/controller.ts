@@ -1,4 +1,4 @@
-import { defaultConsumer, defaultProducer, defaultQueue, defaultTopic } from '../sim/defaults';
+import { defaultConsumer, defaultLambda, defaultProducer, defaultQueue, defaultTopic } from '../sim/defaults';
 import type { Simulation } from '../sim/engine';
 import type { ConfigByKind, FilterPolicy, Graph, GraphNode, NodeKind } from '../sim/types';
 import type { Concept } from './catalog';
@@ -29,6 +29,7 @@ const DEFAULTS: { [K in NodeKind]: () => ConfigByKind[K] } = {
   topic: () => defaultTopic(),
   queue: () => defaultQueue(),
   consumer: () => defaultConsumer(),
+  lambda: () => defaultLambda(),
 };
 
 /** Estado global do jogo. A UI assina mudanças; o renderer lê a cada frame. */
@@ -344,6 +345,13 @@ export class Controller {
     const e = this.graph.edges.find((x) => x.id === edgeId);
     if (!e || !this.canEdit) return;
     e.filterPolicy = policy;
+    this.graphChanged();
+  }
+
+  setEdgeDlq(edgeId: string, dlq: string | null): void {
+    const e = this.graph.edges.find((x) => x.id === edgeId);
+    if (!e || !this.canEdit) return;
+    e.dlq = dlq;
     this.graphChanged();
   }
 

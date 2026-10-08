@@ -110,3 +110,29 @@ test('conexão inválida mostra explicação', async ({ page }) => {
   await clickWorld(page, 3, -3);
   await expect(page.locator('.toast.error')).toContainText('FIFO');
 });
+
+test('fase c06: ativar falha parcial de lote na Lambda', async ({ page }) => {
+  const errors = await openLevel(page, 'c06');
+  await clickWorld(page, 6, 0, 0.8);
+  await expect(page.locator('.inspector-head')).toContainText('Função Lambda');
+  await page.getByText('Report batch item failures').click();
+  await page.getByRole('tab', { name: 'Na vida real' }).click();
+  await expect(page.locator('.realworld')).toContainText('ReportBatchItemFailures');
+  await expect(page.locator('.realworld')).toContainText('batchItemFailures');
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/insp-c06.png` });
+  await finish(page);
+  await expect(page.getByText('Fase concluída!')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('fase c09: DLQ da assinatura SNS', async ({ page }) => {
+  const errors = await openLevel(page, 'c09');
+  await page.getByRole('button', { name: /Fila SQS \(DLQ\)/ }).click();
+  await clickWorld(page, 3, 6, 0);
+  await clickWorld(page, -3, 0, 0.8);
+  const row = page.locator('.edge-row').filter({ hasText: '→ Parceiro (HTTPS)' });
+  await row.getByLabel('DLQ da assinatura').selectOption({ label: 'parceiro-dlq' });
+  await finish(page);
+  await expect(page.getByText('Fase concluída!')).toBeVisible();
+  expect(errors).toEqual([]);
+});

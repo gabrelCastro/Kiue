@@ -68,6 +68,24 @@ export function describeEvent(e: SimEvent, graph: Graph, verbose: boolean): LogL
       return L(`${name(e.node)} saiu do ar`, 'bad');
     case 'outage_end':
       return L(`${name(e.node)} voltou`, 'ok');
+    case 'invocation_failed': {
+      const why = {
+        error: 'uma mensagem lançou erro e o lote inteiro volta para a fila',
+        timeout: 'a função estourou o timeout; o lote inteiro volta para a fila',
+        db: 'o banco recusou a conexão (conexões demais); o lote volta para a fila',
+      }[e.reason];
+      return L(`${name(e.node)}: invocação com ${e.size} mensage${e.size === 1 ? 'm' : 'ns'} falhou: ${why}`, 'bad');
+    }
+    case 'scaled':
+      return L(`${name(e.node)}: concorrência agora é ${e.concurrency}`, 'info');
+    case 'visibility_extended':
+      return verbose ? L(`${name(e.node)} estendeu a visibilidade de ${e.count} mensage${e.count === 1 ? 'm' : 'ns'} (ChangeMessageVisibility)`, 'muted') : null;
+    case 'sns_retry':
+      return L(`${name(e.node)} → ${name(e.target)}: entrega de ${msgRef(e.token)} falhou; nova tentativa (nº${e.attempt})`, 'warn');
+    case 'sns_dlq':
+      return L(`${name(e.node)} → ${name(e.target)}: retries esgotados; ${msgRef(e.token)} foi para a DLQ da assinatura (${name(e.dlq)})`, 'dlq');
+    case 's3_put':
+      return L(`${name(e.node)} guardou o anexo de ${msgRef(e.token)} no S3 e enviou só o ponteiro`, 'info');
   }
 }
 

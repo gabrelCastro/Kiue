@@ -9,7 +9,14 @@ export interface ProducedInfo {
   producerId: string;
 }
 
-export type ApiName = 'SendMessage' | 'Publish' | 'ReceiveMessage' | 'DeleteMessage' | 'DeleteMessageBatch';
+export type ApiName =
+  | 'SendMessage'
+  | 'Publish'
+  | 'ReceiveMessage'
+  | 'DeleteMessage'
+  | 'DeleteMessageBatch'
+  | 'ChangeMessageVisibility'
+  | 'ChangeMessageVisibilityBatch';
 
 /** Métricas agregadas a partir do stream de eventos. */
 export class Metrics {
@@ -37,7 +44,18 @@ export class Metrics {
     ReceiveMessage: 0,
     DeleteMessage: 0,
     DeleteMessageBatch: 0,
+    ChangeMessageVisibility: 0,
+    ChangeMessageVisibilityBatch: 0,
   };
+  invocations = 0;
+  invocationErrors = 0;
+  dbOverloads = 0;
+  peakConcurrency = new Map<string, number>();
+  visibilityExtensions = 0;
+  snsRetries = 0;
+  snsDlq = 0;
+  s3Puts = 0;
+  snsDlqLogical = new Set<number>();
   latencies: number[] = [];
   producedInfo = new Map<number, ProducedInfo>();
   processedBy = new Map<string, Set<number>>();
@@ -118,6 +136,26 @@ export class Metrics {
       case 'visibility_expired':
         this.visibilityExpired++;
         break;
+      case 'invocation_failed':
+        this.invocationErrors++;
+        if (e.reason === 'db') this.dbOverloads++;
+        break;
+      case 'scaled':
+        if (e.concurrency > (this.peakConcurrency.get(e.node) ?? 0)) this.peakConcurrency.set(e.node, e.concurrency);
+        break;
+      case 'visibility_extended':
+        this.visibilityExtensions += e.count;
+        break;
+      case 'sns_retry':
+        this.snsRetries++;
+        break;
+      case 'sns_dlq':
+        this.snsDlq++;
+        this.snsDlqLogical.add(e.token.logicalId);
+        break;
+      case 's3_put':
+        this.s3Puts++;
+        break;
     }
   }
 
@@ -136,6 +174,11 @@ export class Metrics {
     const sorted = [...this.latencies].sort((a, b) => a - b);
     const idx = Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1);
     return sorted[Math.max(0, idx)] / 1000;
+  }
+
+  maxLatency(): number {
+    if (this.latencies.length === 0) return 0;
+    return Math.max(...this.latencies) / 1000;
   }
 
   minLatency(): number {

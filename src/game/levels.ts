@@ -1,5 +1,5 @@
 import { ALL_CONCEPTS } from './catalog';
-import { add, C, configure, E, link, P, Q, T, unlink, type Level } from './level-types';
+import { add, C, configure, E, L, link, P, Q, setEdge, T, unlink, type Level } from './level-types';
 
 const LIVRO_ELETRO_ROUPA = [
   { value: 'livro', weight: 1 },
@@ -759,6 +759,298 @@ const c6: Level = {
   id: 'c06',
   track: 'certificacao',
   index: 6,
+  title: 'Lote parcial',
+  concept: 'SQS + Lambda',
+  story:
+    'O processamento de pedidos agora é uma função Lambda ligada à fila (event source mapping), com lotes de 10. Quando chega um pedido venenoso, a função lança um erro e… o lote INTEIRO volta para a fila. Pedidos bons são cobrados de novo e, depois de 3 tentativas, vão parar na DLQ junto com o venenoso.',
+  objective: 'Só os pedidos venenosos podem ir para a DLQ, e nenhum pedido pode ser cobrado duas vezes.',
+  hint: 'Ative "Report batch item failures" na Lambda: a função passa a devolver só os IDs das mensagens que falharam, e o resto do lote é apagado.',
+  lesson: [
+    'Com SQS como origem, a Lambda recebe um lote; se a função lançar erro, nenhuma mensagem do lote é apagada e todas voltam após o visibility timeout.',
+    'Com ReportBatchItemFailures, a função devolve { batchItemFailures: [{ itemIdentifier }] } e só essas mensagens voltam para a fila.',
+    'Lote menor (batch size 1) também resolve, mas multiplica invocações e chamadas.',
+    'A AWS recomenda visibility timeout da fila de pelo menos 6× o timeout da função, para cobrir os retries do próprio poller.',
+  ],
+  quiz: [
+    {
+      question: 'Uma Lambda com batch size 10 lança exceção no 7º registro. O que acontece por padrão?',
+      options: [
+        'Os 6 primeiros são apagados e só os outros 4 voltam',
+        'Nenhuma mensagem é apagada: o lote inteiro volta após o visibility timeout',
+        'O lote vai direto para a DLQ',
+      ],
+      answer: 1,
+      explanation: 'Sem ReportBatchItemFailures, a invocação é tratada como falha do lote inteiro.',
+    },
+    {
+      question: 'O timeout da função é 30 s. Qual visibility timeout a AWS recomenda para a fila?',
+      options: ['30 s', 'Pelo menos 180 s (6×)', '12 horas'],
+      answer: 1,
+      explanation: 'A recomendação é pelo menos 6× o timeout da função.',
+    },
+  ],
+  concepts: ['lambda', 'batch'],
+  palette: [],
+  graph: {
+    nodes: [
+      P('site', 'Site da loja', -8, 0, { rate: 6, total: 60, poisonRate: 0.08 }),
+      Q('fila', 'fila-pedidos', -1, 0, { visibilityTimeout: 60, maxReceiveCount: 3, dlq: 'dlq' }),
+      Q('dlq', 'fila-pedidos-dlq', -1, 4),
+      L('fn', 'cobrar-pedido', 6, 0, { batchSize: 10, maxConcurrency: 2, processingTime: 0.5, timeout: 10 }),
+    ],
+    edges: [E('site', 'fila', undefined, true), E('fila', 'fn', undefined, true)],
+  },
+  solve: (g) => configure<'lambda'>(g, 'fn', { reportBatchItemFailures: true }),
+  sim: { seed: 171, duration: 400 },
+  goals: [{ type: 'processedAll', consumer: 'fn' }, { type: 'noDuplicates' }, { type: 'poisonToDlq' }, { type: 'noGoodInDlq' }],
+  stars: { p95: 12, apiCalls: 150 },
+};
+
+const c7: Level = {
+  id: 'c07',
+  track: 'certificacao',
+  index: 7,
+  title: 'Proteja o banco',
+  concept: 'MaximumConcurrency',
+  story:
+    'Na promoção relâmpago, a fila encheu e a Lambda fez o que sabe fazer: escalou. Só que cada invocação abre uma conexão com o banco de dados, que aguenta no máximo 4 ao mesmo tempo. O resto é recusado.',
+  objective: 'O banco nunca pode receber mais conexões do que aguenta.',
+  hint: 'Configure a concorrência máxima do event source mapping (MaximumConcurrency). Ela limita quantos lotes a fila entrega à função ao mesmo tempo, sem precisar mexer na concorrência reservada da função.',
+  lesson: [
+    'Com SQS, o event source mapping começa com alguns pollers e escala enquanto houver mensagens na fila.',
+    'MaximumConcurrency (2 a 1.000) limita quantas invocações simultâneas o mapeamento dispara, protegendo recursos como bancos de dados.',
+    'Antes dela existir, o comum era usar concorrência reservada (reserved concurrency), mas isso gera throttling e mensagens voltando para a fila.',
+    'A fila absorve o excesso: com concorrência limitada, as mensagens só esperam um pouco mais.',
+  ],
+  quiz: [
+    {
+      question: 'Qual configuração limita as invocações simultâneas disparadas por uma fila SQS sem causar throttling na função?',
+      options: ['Reserved concurrency da função', 'MaximumConcurrency do event source mapping', 'Batch size'],
+      answer: 1,
+      explanation: 'MaximumConcurrency é aplicada no mapeamento: o poller simplesmente não busca mais lotes do que o limite.',
+    },
+  ],
+  concepts: ['lambda'],
+  palette: [],
+  graph: {
+    nodes: [
+      P('site', 'Site da loja', -8, 0, { rate: 1, total: 120, bursts: [{ at: 5, duration: 6, multiplier: 15 }] }),
+      Q('fila', 'fila-pedidos', -1, 0, { visibilityTimeout: 60 }),
+      L('fn', 'gravar-pedido', 6, 0, { batchSize: 5, processingTime: 0.4, timeout: 10, dbLimit: 4 }),
+    ],
+    edges: [E('site', 'fila', undefined, true), E('fila', 'fn', undefined, true)],
+  },
+  solve: (g) => configure<'lambda'>(g, 'fn', { maxConcurrency: 4 }),
+  sim: { seed: 181, duration: 200 },
+  goals: [{ type: 'noDbOverload' }, { type: 'processedAll', consumer: 'fn' }],
+  stars: { p95: 20 },
+};
+
+const c8: Level = {
+  id: 'c08',
+  track: 'certificacao',
+  index: 8,
+  title: 'Processamento imprevisível',
+  concept: 'ChangeMessageVisibility',
+  story:
+    'Gerar a nota fiscal leva de meio segundo a quase 8 segundos, e o visibility timeout da fila é de 5 s. Notas saem duplicadas. Aumentar o timeout para 60 s resolveria… mas o serviço reinicia de vez em quando, e aí os pedidos que estavam com ele ficariam um minuto parados.',
+  objective: 'Nenhuma nota duplicada e nenhum pedido esperando mais de 25 s.',
+  hint: 'Mantenha o timeout curto e ative o heartbeat: enquanto processa, o consumidor chama ChangeMessageVisibility para estender o prazo. Se ele cair, o heartbeat para e a mensagem volta rápido.',
+  lesson: [
+    'ChangeMessageVisibility muda o visibility timeout de uma mensagem já recebida (contando a partir de agora).',
+    'O padrão "heartbeat" estende o prazo periodicamente enquanto o processamento continua: timeout curto para falhas, sem duplicar trabalho longo.',
+    'Também dá para usar ChangeMessageVisibility com 0 para devolver uma mensagem imediatamente à fila.',
+    'O total de visibilidade de uma mensagem não pode passar de 12 horas desde o primeiro recebimento.',
+  ],
+  quiz: [
+    {
+      question: 'O processamento varia de 1 s a 10 min. Qual a melhor estratégia?',
+      options: [
+        'Visibility timeout de 12 h para nunca duplicar',
+        'Timeout curto + ChangeMessageVisibility periódico enquanto processa',
+        'Short polling',
+      ],
+      answer: 1,
+      explanation: 'Um timeout enorme deixa a mensagem presa por horas se o consumidor morrer. O heartbeat combina segurança e recuperação rápida.',
+    },
+    {
+      question: 'O que ChangeMessageVisibility com VisibilityTimeout = 0 faz?',
+      options: ['Apaga a mensagem', 'Torna a mensagem visível de novo imediatamente', 'Desativa a fila'],
+      answer: 1,
+      explanation: 'É um jeito de "devolver" uma mensagem à fila sem esperar o prazo.',
+    },
+  ],
+  concepts: ['visibility', 'heartbeat'],
+  palette: [],
+  graph: {
+    nodes: [
+      P('site', 'Site da loja', -7, 0, { rate: 0.6, total: 40 }),
+      Q('fila', 'fila-notas', 0, 0, { visibilityTimeout: 5 }),
+      C('nf', 'Emissor de NF', 7, 0, { processingTime: 4, jitter: 0.9, workers: 3, outages: [{ from: 30, to: 33 }] }),
+    ],
+    edges: [E('site', 'fila', undefined, true), E('fila', 'nf', undefined, true)],
+  },
+  solve: (g) => configure<'consumer'>(g, 'nf', { heartbeat: true }),
+  sim: { seed: 191, duration: 200 },
+  goals: [{ type: 'processedAll', consumer: 'nf' }, { type: 'noDuplicates' }, { type: 'maxLatency', seconds: 25 }],
+  stars: { p95: 12 },
+};
+
+const c9: Level = {
+  id: 'c09',
+  track: 'certificacao',
+  index: 9,
+  title: 'Webhook fora do ar',
+  concept: 'Retries do SNS e DLQ da assinatura',
+  story:
+    'Além do Estoque, um parceiro de entregas recebe cada pedido por um webhook HTTPS assinado no tópico. Ele vai ficar fora do ar por 35 segundos. O SNS tenta entregar de novo algumas vezes, mas depois desiste e o pedido some.',
+  objective: 'Nenhum pedido pode se perder, nem mesmo os do parceiro.',
+  hint: 'Assinaturas SNS também podem ter DLQ (RedrivePolicy da assinatura). Coloque uma fila e escolha-a como "DLQ da assinatura" na conexão tópico → Parceiro (selecione o tópico).',
+  lesson: [
+    'O SNS retenta entregas que falham conforme a delivery policy. Para HTTP/S, o padrão é 3 retries com 20 s de intervalo; para SQS e Lambda, a AWS tenta por muito mais tempo.',
+    'Esgotadas as tentativas, a mensagem é descartada, a menos que a assinatura tenha uma DLQ (fila SQS) configurada na RedrivePolicy.',
+    'A DLQ é da ASSINATURA, não do tópico: cada assinante pode ter a sua.',
+    'Se o destino aceitasse ler uma fila, o melhor seria SNS → SQS → consumidor, e a própria fila seguraria as mensagens.',
+  ],
+  quiz: [
+    {
+      question: 'Onde se configura a DLQ para entregas do SNS que falharam?',
+      options: ['No tópico', 'Na assinatura (RedrivePolicy da subscription)', 'No produtor'],
+      answer: 1,
+      explanation: 'Cada assinatura pode ter a sua DLQ; ela recebe as mensagens que esgotaram os retries daquela entrega.',
+    },
+    {
+      question: 'A DLQ de uma assinatura SNS precisa ser…',
+      options: ['Outro tópico SNS', 'Uma fila SQS (FIFO se o tópico for FIFO)', 'Um bucket S3'],
+      answer: 1,
+      explanation: 'É sempre uma fila SQS, do mesmo tipo do tópico.',
+    },
+  ],
+  concepts: ['snsdlq'],
+  palette: [{ kind: 'queue', label: 'Fila SQS (DLQ)', name: 'parceiro-dlq', count: 1 }],
+  graph: {
+    nodes: [
+      P('site', 'Site da loja', -8, 0, { rate: 1, total: 40 }),
+      T('topico', 'pedidos-criados', -3, 0),
+      Q('fila', 'fila-estoque', 3, -3),
+      C('estoque', 'Estoque', 8, -3, { processingTime: 0.3 }),
+      C('parceiro', 'Parceiro (HTTPS)', 8, 3, { processingTime: 0.3, workers: 3, httpOnly: true, outages: [{ from: 10, to: 45 }] }),
+    ],
+    edges: [E('site', 'topico', undefined, true), E('topico', 'fila', undefined, true), E('fila', 'estoque', undefined, true), E('topico', 'parceiro', undefined, true)],
+  },
+  solve: (g) => {
+    add(g, Q('dlq', 'parceiro-dlq', 3, 6));
+    setEdge(g, 'topico', 'parceiro', { dlq: 'dlq' });
+  },
+  sim: { seed: 201, duration: 120 },
+  goals: [{ type: 'noLost' }, { type: 'processedAll', consumer: 'estoque' }],
+  stars: {},
+};
+
+const c10: Level = {
+  id: 'c10',
+  track: 'certificacao',
+  index: 10,
+  title: 'Um grupo só',
+  concept: 'Paralelismo no FIFO',
+  story:
+    'A fila FIFO de pedidos tem três consumidores, mas só um trabalha por vez. O motivo: todo pedido é enviado com o mesmo MessageGroupId, "pedidos". A ordem só importa entre pedidos do mesmo cliente.',
+  objective: 'Mantenha a ordem por cliente e a latência p95 em até 8 s.',
+  hint: 'Selecione o produtor e use um MessageGroupId por cliente. Grupos diferentes são entregues em paralelo.',
+  lesson: [
+    'Em FIFO, mensagens do mesmo grupo são entregues uma de cada vez: um grupo único transforma a fila em fila indiana.',
+    'Use como group ID a entidade cuja ordem importa (cliente, conta, pedido). Mais grupos = mais paralelismo.',
+    'Cotas FIFO: 300 transações/s por ação sem lote (até 3.000 mensagens/s com lotes de 10). O high throughput mode aumenta muito esse limite, distribuindo por MessageGroupId.',
+  ],
+  quiz: [
+    {
+      question: 'Uma fila FIFO tem 10 consumidores, mas todas as mensagens usam o mesmo MessageGroupId. Quantas são processadas ao mesmo tempo?',
+      options: ['10', '1', 'Depende do batch size'],
+      answer: 1,
+      explanation: 'Enquanto uma mensagem do grupo está em voo, as seguintes do mesmo grupo não são entregues.',
+    },
+    {
+      question: 'Sem lotes, qual é a cota padrão de uma fila FIFO (sem high throughput)?',
+      options: ['300 transações por segundo por ação de API', 'Ilimitada', '10 mensagens por segundo'],
+      answer: 0,
+      explanation: '300 TPS por ação (SendMessage, ReceiveMessage, DeleteMessage); com lotes de 10 chega a 3.000 mensagens/s.',
+    },
+  ],
+  concepts: ['groups'],
+  palette: [],
+  graph: {
+    nodes: [
+      P('app', 'App de pedidos', -7, 0, { rate: 3, total: 60, groups: 1, dedupId: true }),
+      Q('fila', 'pedidos.fifo', 0, 0, { fifo: true }),
+      C('c1', 'Separação 1', 7, -3, { processingTime: 0.8, jitter: 0.3 }),
+      C('c2', 'Separação 2', 7, 0, { processingTime: 0.8, jitter: 0.3 }),
+      C('c3', 'Separação 3', 7, 3, { processingTime: 0.8, jitter: 0.3 }),
+    ],
+    edges: [E('app', 'fila', undefined, true), E('fila', 'c1', undefined, true), E('fila', 'c2', undefined, true), E('fila', 'c3', undefined, true)],
+  },
+  solve: (g) => configure<'producer'>(g, 'app', { groups: 6 }),
+  sim: { seed: 211, duration: 150 },
+  goals: [{ type: 'processedAll' }, { type: 'noOutOfOrder' }, { type: 'maxP95', seconds: 8 }],
+  stars: { p95: 6 },
+  highlightGroups: true,
+};
+
+const c11: Level = {
+  id: 'c11',
+  track: 'certificacao',
+  index: 11,
+  title: 'Nota fiscal anexada',
+  concept: 'Tamanho de mensagem',
+  story:
+    'Alguns pedidos agora vêm com o PDF da nota fiscal anexado: cerca de 3 MB. O SendMessage desses pedidos falha com MessageTooLong e eles se perdem.',
+  objective: 'Nenhum pedido perdido, inclusive os com anexo.',
+  hint: 'O SQS aceita no máximo 1 MiB por mensagem. Ative o Extended Client no produtor: o anexo vai para o S3 e a mensagem leva só a referência.',
+  lesson: [
+    'O tamanho máximo de uma mensagem SQS é 1 MiB (até agosto de 2025 era 256 KB, número que ainda aparece em muitos materiais). No SNS, o limite é 256 KB.',
+    'Cada bloco de 64 KB do payload é cobrado como uma requisição: uma mensagem de 256 KB custa 4.',
+    'Para payloads maiores, guarde o conteúdo no S3 e envie a referência ("claim check"). O Extended Client Library (Java/Python) faz isso de forma transparente.',
+    'Criptografia: SSE-SQS (chaves gerenciadas pelo SQS, padrão em filas novas) ou SSE-KMS (chave do KMS, com controle e auditoria da chave).',
+  ],
+  quiz: [
+    {
+      question: 'Como enviar um arquivo de 5 MB "pelo" SQS?',
+      options: ['Aumentar o limite da fila', 'Guardar o arquivo no S3 e enviar a referência (ex.: Extended Client)', 'Dividir em várias filas'],
+      answer: 1,
+      explanation: 'O limite de 1 MiB não é configurável para cima; o padrão é o claim check com S3.',
+    },
+    {
+      question: 'Quantas requisições são cobradas por um SendMessage de 200 KB?',
+      options: ['1', '4', '200'],
+      answer: 1,
+      explanation: 'Cada bloco de 64 KB conta como uma requisição: 200 KB = 4 blocos.',
+    },
+    {
+      question: 'Você precisa auditar o uso da chave de criptografia da fila no CloudTrail. Qual opção?',
+      options: ['SSE-SQS', 'SSE-KMS', 'Nenhuma, o SQS não criptografa'],
+      answer: 1,
+      explanation: 'Com SSE-KMS você usa uma chave do KMS, com políticas próprias e chamadas registradas no CloudTrail.',
+    },
+  ],
+  concepts: ['payload'],
+  palette: [],
+  graph: {
+    nodes: [
+      P('loja', 'Loja', -7, 0, { rate: 1, total: 30, largeRate: 0.25, largeKb: 3000 }),
+      Q('fila', 'fila-pedidos', 0, 0),
+      C('fiscal', 'Fiscal', 7, 0, { processingTime: 0.4 }),
+    ],
+    edges: [E('loja', 'fila', undefined, true), E('fila', 'fiscal', undefined, true)],
+  },
+  solve: (g) => configure<'producer'>(g, 'loja', { extendedClient: true }),
+  sim: { seed: 221, duration: 90 },
+  goals: [{ type: 'noLost' }, { type: 'processedAll', consumer: 'fiscal' }],
+  stars: { p95: 3 },
+};
+
+const c12: Level = {
+  id: 'c12',
+  track: 'certificacao',
+  index: 12,
   title: 'Exame final',
   concept: 'Tudo junto',
   story:
@@ -843,6 +1135,7 @@ export const sandbox: Level = {
     { kind: 'topic', label: 'Tópico SNS', name: 'topico', count: 10 },
     { kind: 'queue', label: 'Fila SQS', name: 'fila', count: 20 },
     { kind: 'consumer', label: 'Consumidor', name: 'Consumidor', count: 20 },
+    { kind: 'lambda', label: 'Função Lambda', name: 'funcao', count: 10 },
   ],
   graph: {
     nodes: [{ ...P('p1', 'Produtor', -7, 0, { rate: 1, total: 30, types: LIVRO_ELETRO_ROUPA }), locked: false }],
@@ -854,7 +1147,7 @@ export const sandbox: Level = {
   stars: {},
 };
 
-export const LEVELS: Level[] = [l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, c1, c2, c3, c4, c5, c6];
+export const LEVELS: Level[] = [l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12];
 
 export function levelById(id: string): Level | undefined {
   return id === 'sandbox' ? sandbox : LEVELS.find((l) => l.id === id);

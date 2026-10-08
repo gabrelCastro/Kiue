@@ -13,7 +13,12 @@ export type Concept =
   | 'retention'
   | 'delay'
   | 'processing'
-  | 'producer';
+  | 'producer'
+  | 'lambda'
+  | 'heartbeat'
+  | 'snsdlq'
+  | 'groups'
+  | 'payload';
 
 export const ALL_CONCEPTS: Concept[] = [
   'visibility',
@@ -29,6 +34,11 @@ export const ALL_CONCEPTS: Concept[] = [
   'delay',
   'processing',
   'producer',
+  'lambda',
+  'heartbeat',
+  'snsdlq',
+  'groups',
+  'payload',
 ];
 
 export interface MessageType {
@@ -65,4 +75,5 @@ export const KIND_LABEL = {
   topic: 'Tópico SNS',
   queue: 'Fila SQS',
   consumer: 'Consumidor',
+  lambda: 'Função Lambda',
 } as const;

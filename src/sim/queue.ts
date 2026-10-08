@@ -173,6 +173,17 @@ export class SqsQueue {
     return m;
   }
 
+  /**
+   * ChangeMessageVisibility: renova o prazo de uma mensagem em voo.
+   * Só funciona com o receipt handle atual e enquanto a mensagem ainda está em voo.
+   */
+  extendVisibility(receipt: number, now: number): boolean {
+    const m = this.messages.find((x) => x.receipt === receipt && x.inFlight);
+    if (!m) return false;
+    m.visibleAt = now + this.config.visibilityTimeout * 1000;
+    return true;
+  }
+
   /** Expira visibility timeouts e retenção. */
   tick(ctx: QueueContext): void {
     const { now } = ctx;

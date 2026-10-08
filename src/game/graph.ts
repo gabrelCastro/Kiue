@@ -21,32 +21,59 @@ export function connectionError(g: Graph, fromId: string, toId: string): string 
   if (g.edges.some((e) => e.from === fromId && e.to === toId)) return 'Essas peças já estão ligadas.';
   if (to.kind === 'producer') return 'O produtor só envia mensagens; nada entrega para ele.';
 
+  const httpOnly = to.kind === 'consumer' && (to as GraphNode<'consumer'>).config.httpOnly;
+
   switch (from.kind) {
     case 'producer':
       if (g.edges.some((e) => e.from === fromId))
         return 'Um produtor envia para um único destino. Remova a conexão atual primeiro.';
+      if (to.kind === 'lambda')
+        return 'Neste jogo a Lambda é acionada por uma fila (event source mapping). Coloque uma fila SQS entre o produtor e a função.';
       break;
-    case 'topic':
+    case 'topic': {
+      const topicFifo = (from as GraphNode<'topic'>).config.fifo;
+      if (to.kind === 'consumer') {
+        if (topicFifo) return 'Tópico SNS FIFO só entrega para filas SQS FIFO.';
+        break; // assinatura HTTP/HTTPS
+      }
       if (to.kind !== 'queue')
-        return 'Neste jogo o SNS entrega para filas SQS. (Na AWS ele também entrega para Lambda, HTTP, e-mail, SMS…)';
-      if ((from as GraphNode<'topic'>).config.fifo && !(to as GraphNode<'queue'>).config.fifo)
-        return 'Tópico SNS FIFO só aceita filas SQS FIFO como assinantes.';
-      if (!(from as GraphNode<'topic'>).config.fifo && (to as GraphNode<'queue'>).config.fifo)
+        return 'Neste jogo o SNS entrega para filas SQS e endpoints HTTP. (Na AWS ele também invoca Lambda e envia e-mail e SMS.)';
+      if (topicFifo && !(to as GraphNode<'queue'>).config.fifo) return 'Tópico SNS FIFO só aceita filas SQS FIFO como assinantes.';
+      if (!topicFifo && (to as GraphNode<'queue'>).config.fifo)
         return 'Fila FIFO só pode assinar tópico SNS FIFO. Mude o tópico para FIFO.';
       break;
+    }
     case 'queue':
       if (to.kind === 'queue')
         return 'Fila não envia para fila. Para usar uma fila como DLQ, selecione a fila de origem e escolha a "Dead-letter queue" no inspetor.';
-      if (to.kind !== 'consumer')
-        return 'O SQS não empurra mensagens: alguém precisa ler a fila. Ligue a fila a um consumidor.';
+      if (to.kind !== 'consumer' && to.kind !== 'lambda')
+        return 'O SQS não empurra mensagens: alguém precisa ler a fila. Ligue a fila a um consumidor ou a uma Lambda.';
+      if (httpOnly) return `${to.name} é um endpoint HTTP de terceiros: ele só recebe chamadas, não sabe ler filas SQS.`;
       break;
     case 'consumer':
       return 'Consumidores só leem mensagens neste jogo.';
+    case 'lambda':
+      return 'Neste jogo a Lambda só consome mensagens.';
   }
 
-  if (to.kind === 'consumer' && g.edges.some((e) => e.to === toId))
-    return 'Um consumidor lê de uma única origem. Remova a conexão atual dele primeiro.';
+  if ((to.kind === 'consumer' || to.kind === 'lambda') && g.edges.some((e) => e.to === toId))
+    return `${to.kind === 'lambda' ? 'Uma Lambda' : 'Um consumidor'} lê de uma única origem. Remova a conexão atual primeiro.`;
   return null;
+}
+
+/** Filas que podem ser DLQ de uma assinatura SNS (mesmo tipo do tópico). */
+export function subscriptionDlqCandidates(g: Graph, edge: GraphEdge): GraphNode<'queue'>[] {
+  const t = findNode(g, edge.from);
+  if (!isTopic(t)) return [];
+  return g.nodes.filter((n): n is GraphNode<'queue'> => isQueue(n) && n.config.fifo === t.config.fifo);
+}
+
+/** Ids das filas usadas como DLQ (de outra fila ou de uma assinatura SNS). */
+export function dlqIds(g: Graph): Set<string> {
+  const ids = new Set<string>();
+  for (const n of g.nodes) if (isQueue(n) && n.config.dlq) ids.add(n.config.dlq);
+  for (const e of g.edges) if (e.dlq) ids.add(e.dlq);
+  return ids;
 }
 
 /** Filas que podem servir de DLQ para `queueId` (mesmo tipo, Standard ou FIFO). */
@@ -77,7 +104,7 @@ export function validateGraph(g: Graph): GraphIssues {
           errors.push(`${q.name}: a DLQ de uma fila ${q.config.fifo ? 'FIFO' : 'Standard'} precisa ser ${q.config.fifo ? 'FIFO' : 'Standard'}.`);
       }
       const hasConsumer = g.edges.some((e) => e.from === n.id);
-      const isDlq = g.nodes.some((o) => o.kind === 'queue' && (o as GraphNode<'queue'>).config.dlq === n.id);
+      const isDlq = dlqIds(g).has(n.id);
       if (!hasConsumer && !isDlq) warnings.push(`${n.name} não tem consumidor: as mensagens vão ficar paradas.`);
     }
     if (n.kind === 'producer' && !g.edges.some((e) => e.from === n.id))
@@ -88,6 +115,12 @@ export function validateGraph(g: Graph): GraphIssues {
   for (const e of g.edges) {
     const from = findNode(g, e.from);
     const to = findNode(g, e.to);
+    if (e.dlq) {
+      const dlq = findNode(g, e.dlq);
+      if (!isQueue(dlq)) errors.push(`Assinatura ${from?.name} → ${to?.name}: a DLQ configurada não existe mais.`);
+      else if (isTopic(from) && dlq.config.fifo !== from.config.fifo)
+        errors.push(`Assinatura ${from.name} → ${to?.name}: a DLQ precisa ser do mesmo tipo do tópico.`);
+    }
     if (isTopic(from) && isQueue(to) && from.config.fifo !== to.config.fifo)
       errors.push(`${from.name} → ${to.name}: tópico e fila precisam ser ambos FIFO ou ambos Standard.`);
   }
@@ -97,6 +130,7 @@ export function validateGraph(g: Graph): GraphIssues {
 export function removeNode(g: Graph, id: string): void {
   g.nodes = g.nodes.filter((n) => n.id !== id);
   g.edges = g.edges.filter((e) => e.from !== id && e.to !== id);
+  for (const e of g.edges) if (e.dlq === id) e.dlq = null;
   for (const n of g.nodes) {
     if (n.kind === 'queue' && (n as GraphNode<'queue'>).config.dlq === id) (n as GraphNode<'queue'>).config.dlq = null;
   }

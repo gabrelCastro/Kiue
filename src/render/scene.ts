@@ -36,11 +36,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { groupColor, POISON_COLOR, typeInfo } from '../game/catalog';
 import type { Controller } from '../game/controller';
+import { dlqIds } from '../game/graph';
 import { describeFilterPolicy } from '../sim/filter';
 import type { Simulation } from '../sim/engine';
 import type { GraphNode, SimEvent, Token } from '../sim/types';
 import { Effects } from './effects';
-import { dlqCurve, edgeCurve, queueSlot, workerSlot } from './layout';
+import { dlqCurve, edgeCurve, lambdaSlot, queueSlot, workerSlot } from './layout';
 import { buildNode, NODE_COLORS, type NodeView } from './nodes';
 import { describeNode } from './labels';
 
@@ -272,10 +273,10 @@ export class SceneView {
     this.builtLevel = levelId;
     this.clearWorld();
     const g = this.ctrl.graph;
-    const dlqIds = new Set(g.nodes.filter((n) => n.kind === 'queue').map((n) => (n as GraphNode<'queue'>).config.dlq).filter(Boolean) as string[]);
+    const dlqs = dlqIds(g);
 
     for (const n of g.nodes) {
-      const view = buildNode(n, dlqIds.has(n.id));
+      const view = buildNode(n, dlqs.has(n.id));
       this.nodeViews.set(n.id, view);
       this.world.add(view.group);
     }
@@ -303,6 +304,26 @@ export class SceneView {
         obj.position.copy(curve.getPoint(0.62)).add(new Vector3(0, 0.35, 0));
         this.world.add(obj);
       }
+    }
+
+    for (const e of g.edges) {
+      const topic = e.dlq ? this.nodeViews.get(e.from)?.node : undefined;
+      const dlq = e.dlq ? this.nodeViews.get(e.dlq)?.node : undefined;
+      if (!topic || !dlq) continue;
+      const curve = dlqCurve(topic, dlq);
+      this.curves.set(`dlq:${topic.id}->${dlq.id}`, curve);
+      const line = new Line(
+        new BufferGeometry().setFromPoints(curve.getPoints(40)),
+        new LineDashedMaterial({ color: NODE_COLORS.dlq, dashSize: 0.25, gapSize: 0.15 }),
+      );
+      line.computeLineDistances();
+      this.world.add(line);
+      const div = document.createElement('div');
+      div.className = 'edge-label dlq';
+      div.textContent = `☠ DLQ da assinatura → ${this.nodeViews.get(e.to)?.node.name ?? ''}`;
+      const obj = new CSS2DObject(div);
+      obj.position.copy(curve.getPoint(0.5)).add(new Vector3(-2.2, 0.1, 0));
+      this.world.add(obj);
     }
 
     for (const n of g.nodes) {
@@ -337,19 +358,30 @@ export class SceneView {
         const busy = v.node.kind !== 'consumer' || this.consumerBusy(sim, v.node.id);
         if (busy) s.rotation.z += dt * 0.002 * (v.node.kind === 'topic' ? 0.6 : 2);
       }
-      if (v.node.kind === 'consumer' && sim) {
+      const isWorkerNode = v.node.kind === 'consumer' || v.node.kind === 'lambda';
+      if (isWorkerNode && sim) {
         const c = sim.consumers.get(v.node.id);
         c?.workers.forEach((w, j) => {
           const pad = v.workerPads[j];
           if (!pad) return;
           const color =
-            w.state === 'down' ? '#ef4444' : w.state === 'processing' || w.state === 'receiving' ? '#22c55e' : w.state === 'polling' ? '#38bdf8' : '#475569';
+            w.state === 'down'
+              ? '#ef4444'
+              : w.state === 'processing' || w.state === 'receiving'
+                ? w.failReason === 'db'
+                  ? '#ef4444'
+                  : '#22c55e'
+                : w.state === 'polling'
+                  ? '#38bdf8'
+                  : j >= c.active
+                    ? '#1e293b'
+                    : '#475569';
           (pad.material as MeshStandardMaterial).color.set(color);
         });
         const mat = v.body.material as MeshStandardMaterial;
         mat.color.set(c?.down ? '#7f1d1d' : v.baseColor);
-      } else if (v.node.kind === 'consumer') {
-        for (const pad of v.workerPads) (pad.material as MeshStandardMaterial).color.set('#475569');
+      } else if (isWorkerNode) {
+        for (const pad of v.workerPads) (pad.material as MeshStandardMaterial).color.set(v.node.kind === 'lambda' ? '#1e293b' : '#475569');
         (v.body.material as MeshStandardMaterial).color.set(v.baseColor);
       }
     }
@@ -471,7 +503,8 @@ export class SceneView {
       if (!view) continue;
       c.workers.forEach((w, j) => {
         if (w.state !== 'processing' || !w.batch.length) return;
-        workerSlot(view.node, j, c.workers.length, this.tmp);
+        if (c.lambda) lambdaSlot(view.node, j, c.workers.length, this.tmp);
+        else workerSlot(view.node, j, c.workers.length, this.tmp);
         const current = w.batch[w.index];
         if (current) put(this.tmp, current.token, 1.05, now * 0.006);
         for (let k = w.index + 1; k < w.batch.length && k < w.index + 6; k++) {
@@ -554,6 +587,29 @@ export class SceneView {
         break;
       case 'outage_end':
         this.effects.spawn(at(e.node), '▶ voltou', 'ok');
+        break;
+      case 'invocation_failed':
+        this.effects.spawn(
+          at(e.node),
+          e.reason === 'db' ? '✗ banco recusou' : e.reason === 'timeout' ? '✗ timeout: lote volta' : `✗ lote de ${e.size} volta`,
+          'bad',
+          e.node + 'inv',
+        );
+        break;
+      case 'scaled':
+        this.effects.spawn(at(e.node), `concorrência ${e.concurrency}`, 'info', e.node + 'scale', 600);
+        break;
+      case 'visibility_extended':
+        this.effects.spawn(at(e.node), '◷ +visibilidade', 'muted', e.node + 'hb', 600);
+        break;
+      case 'sns_retry':
+        this.effects.spawn(at(e.target), `↻ SNS tenta de novo (${e.attempt})`, 'warn', e.target + 'retry', 300);
+        break;
+      case 'sns_dlq':
+        this.effects.spawn(at(e.target), '☠ → DLQ da assinatura', 'dlq');
+        break;
+      case 's3_put':
+        this.effects.spawn(at(e.node), '⇪ anexo no S3', 'info');
         break;
     }
   }

@@ -10,7 +10,10 @@ export type Goal =
   | { type: 'poisonToDlq' }
   | { type: 'minLatency'; seconds: number }
   | { type: 'maxP95'; seconds: number }
-  | { type: 'maxApiCalls'; max: number };
+  | { type: 'maxApiCalls'; max: number }
+  | { type: 'maxLatency'; seconds: number }
+  | { type: 'noGoodInDlq' }
+  | { type: 'noDbOverload' };
 
 export type GoalStatus = 'ok' | 'fail' | 'pending';
 
@@ -134,6 +137,33 @@ export function evaluateGoal(goal: Goal, sim: Simulation, graph: Graph, final: b
         why: final && !ok ? 'Os pedidos esperaram demais na fila. Mais consumidores processam em paralelo.' : undefined,
       };
     }
+    case 'maxLatency': {
+      const max = m.maxLatency();
+      const fail = max > goal.seconds;
+      return {
+        goal,
+        label: `Nenhum pedido espera mais de ${goal.seconds}s`,
+        status: fail ? 'fail' : final ? (m.latencies.length ? 'ok' : 'fail') : 'pending',
+        detail: m.latencies.length ? `mais lento: ${max.toFixed(1)}s` : '—',
+        why: fail ? 'Algum pedido ficou parado tempo demais: quando um consumidor cai, a mensagem só volta depois do visibility timeout.' : undefined,
+      };
+    }
+    case 'noGoodInDlq': {
+      const good = [...m.dlqLogical].filter((id) => !m.producedInfo.get(id)?.poison).length;
+      return zero(
+        good,
+        'Só mensagens venenosas vão para a DLQ',
+        'pedidos bons na DLQ',
+        'Pedidos válidos foram parar na DLQ: eles voltaram para a fila junto com o lote de uma mensagem venenosa até estourar o maxReceiveCount.',
+      );
+    }
+    case 'noDbOverload':
+      return zero(
+        m.dbOverloads,
+        'O banco nunca recebe conexões demais',
+        'invocações recusadas pelo banco',
+        'A Lambda escalou além do que o banco aguenta. Limite a concorrência do event source mapping (MaximumConcurrency).',
+      );
     case 'maxApiCalls': {
       const fail = m.apiCalls > goal.max;
       return {

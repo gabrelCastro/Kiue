@@ -1,9 +1,10 @@
-import { defaultConsumer, defaultProducer, defaultQueue, defaultTopic } from '../../src/sim/defaults';
+import { defaultConsumer, defaultLambda, defaultProducer, defaultQueue, defaultTopic } from '../../src/sim/defaults';
 import type {
   ConsumerConfig,
   FilterPolicy,
   Graph,
   GraphNode,
+  LambdaConfig,
   ProducerConfig,
   QueueConfig,
   TopicConfig,
@@ -22,9 +23,13 @@ export const consumer = (id: string, c: Partial<ConsumerConfig> = {}): GraphNode
   id, kind: 'consumer', name: id, x: 0, z: 0, config: defaultConsumer(c),
 });
 
-export function graph(nodes: GraphNode[], edges: [string, string, FilterPolicy?][]): Graph {
+export const lambda = (id: string, c: Partial<LambdaConfig> = {}): GraphNode => ({
+  id, kind: 'lambda', name: id, x: 0, z: 0, config: defaultLambda(c),
+});
+
+export function graph(nodes: GraphNode[], edges: [string, string, FilterPolicy?, string?][]): Graph {
   return {
     nodes,
-    edges: edges.map(([from, to, filterPolicy], i) => ({ id: `e${i}`, from, to, filterPolicy })),
+    edges: edges.map(([from, to, filterPolicy, dlq], i) => ({ id: `e${i}`, from, to, filterPolicy, dlq })),
   };
 }

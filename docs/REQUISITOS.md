@@ -130,3 +130,7 @@ UI (Preact, DOM)  ◄── estado ──  Controller (game/)  ── comandos �
 - `src/render`: cena isométrica, peças, conexões, tokens (InstancedMesh), efeitos.
 - `src/ui`: componentes Preact.
 - `tests/`: testes do simulador e das soluções de cada fase.
+
+## 7. Parte 2
+
+Lambda (event source mapping), heartbeat, retries/DLQ de assinatura SNS, paralelismo FIFO e tamanho de mensagem: regras e fases em `docs/PLANO-PARTE2.md`.

@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
 import { KIND_LABEL, MESSAGE_TYPES, typeInfo } from '../game/catalog';
 import type { Controller } from '../game/controller';
-import { dlqCandidates, findNode } from '../game/graph';
+import { dlqCandidates, findNode, subscriptionDlqCandidates } from '../game/graph';
 import { snippetsFor } from '../game/realworld';
 import type { FilterPolicy, GraphEdge, GraphNode } from '../sim/types';
 import { NumberField, Select, Toggle } from './fields';
@@ -71,10 +71,11 @@ function NodeConfig({ ctrl, node }: { ctrl: Controller; node: GraphNode }) {
       {node.kind === 'topic' && <TopicConfig ctrl={ctrl} node={node as GraphNode<'topic'>} disabled={disabled} />}
       {node.kind === 'consumer' && <ConsumerConfig ctrl={ctrl} node={node as GraphNode<'consumer'>} disabled={disabled} />}
       {node.kind === 'producer' && <ProducerConfig ctrl={ctrl} node={node as GraphNode<'producer'>} disabled={disabled} />}
+      {node.kind === 'lambda' && <LambdaConfig ctrl={ctrl} node={node as GraphNode<'lambda'>} disabled={disabled} />}
       <Connections ctrl={ctrl} node={node} />
       {ctrl.canEdit && (
         <div class="row gap">
-          {node.kind !== 'consumer' && (
+          {node.kind !== 'consumer' && node.kind !== 'lambda' && (
             <button class="btn primary" onClick={() => ctrl.startConnect(node.id)} disabled={ctrl.tool.type === 'connect'}>
               {ctrl.tool.type === 'connect' ? 'Clique no destino…' : '⟶ Conectar'}
             </button>
@@ -285,6 +286,16 @@ function ConsumerConfig({ ctrl, node, disabled }: { ctrl: Controller; node: Grap
           help="Guarda o ID de cada pedido processado e ignora repetições."
         />
       )}
+      {ctrl.hasConcept('heartbeat') && (
+        <Toggle
+          label="Heartbeat (ChangeMessageVisibility)"
+          checked={c.heartbeat}
+          disabled={disabled}
+          onChange={(v) => set({ heartbeat: v })}
+          help="Enquanto processa, estende o visibility timeout das mensagens recebidas antes que ele expire."
+        />
+      )}
+      {c.httpOnly && <p class="kv muted small">Endpoint HTTPS de terceiros: recebe chamadas do SNS, não lê filas.</p>}
       {fixed.length > 0 && <Locked text={`Nesta fase: ${fixed.join(', ')}.`} />}
     </>
   );
@@ -302,7 +313,32 @@ function ProducerConfig({ ctrl, node, disabled }: { ctrl: Controller; node: Grap
         {c.dedupId && <p class="kv">Envia MessageDeduplicationId</p>}
         {c.poisonRate > 0 && <p class="kv">Venenosas: <b>{Math.round(c.poisonRate * 100)}%</b></p>}
         {c.retryRate > 0 && <p class="kv">Retries de rede: <b>{Math.round(c.retryRate * 100)}%</b></p>}
-        <Locked text="O produtor faz parte do cenário desta fase." />
+        {c.largeRate > 0 && (
+          <p class="kv">
+            Anexos de <b>{c.largeKb} KB</b> em {Math.round(c.largeRate * 100)}% dos pedidos (os demais têm 2 KB)
+          </p>
+        )}
+        {ctrl.hasConcept('groups') && (
+          <NumberField
+            label="Clientes distintos (MessageGroupId)"
+            value={c.groups}
+            min={1}
+            max={6}
+            disabled={disabled}
+            onChange={(v) => ctrl.updateConfig<'producer'>(node.id, { groups: v })}
+            help={c.groups === 1 ? 'Todos os pedidos usam o mesmo MessageGroupId: a fila FIFO entrega um por vez.' : 'Um MessageGroupId por cliente: grupos diferentes são processados em paralelo.'}
+          />
+        )}
+        {ctrl.hasConcept('payload') && (
+          <Toggle
+            label="Extended Client (payload grande no S3)"
+            checked={c.extendedClient}
+            disabled={disabled}
+            onChange={(v) => ctrl.updateConfig<'producer'>(node.id, { extendedClient: v })}
+            help="Mensagens acima de 256 KB vão para um bucket S3; a fila recebe só a referência."
+          />
+        )}
+        <Locked text={ctrl.hasConcept('groups') || ctrl.hasConcept('payload') ? 'O resto do produtor faz parte do cenário.' : 'O produtor faz parte do cenário desta fase.'} />
       </div>
     );
   }
@@ -365,7 +401,87 @@ function EdgeRow({ ctrl, edge, label }: { ctrl: Controller; edge: GraphEdge; lab
         {edge.locked && <span class="muted small">fixa</span>}
       </div>
       {fromTopic && <FilterEditor ctrl={ctrl} edge={edge} />}
+      {fromTopic && <SubscriptionDlq ctrl={ctrl} edge={edge} />}
     </div>
+  );
+}
+
+function SubscriptionDlq({ ctrl, edge }: { ctrl: Controller; edge: GraphEdge }) {
+  if (!ctrl.hasConcept('snsdlq')) {
+    const dlq = edge.dlq ? findNode(ctrl.graph, edge.dlq) : undefined;
+    return dlq ? <p class="muted small">DLQ da assinatura: {dlq.name}</p> : null;
+  }
+  const options = subscriptionDlqCandidates(ctrl.graph, edge).filter((q) => q.id !== edge.to);
+  return (
+    <Select
+      label="DLQ da assinatura"
+      value={edge.dlq ?? ''}
+      options={[{ value: '', label: '— nenhuma (descarta após os retries) —' }, ...options.map((q) => ({ value: q.id, label: q.name }))]}
+      disabled={!ctrl.canEdit}
+      onChange={(v) => ctrl.setEdgeDlq(edge.id, v || null)}
+      help={options.length ? 'Recebe as mensagens que o SNS não conseguiu entregar depois de todos os retries.' : 'Coloque uma fila SQS para usar como DLQ desta assinatura.'}
+    />
+  );
+}
+
+function LambdaConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphNode<'lambda'>; disabled: boolean }) {
+  const c = node.config;
+  const set = (patch: Partial<typeof c>) => ctrl.updateConfig<'lambda'>(node.id, patch);
+  const src = ctrl.graph.edges.find((e) => e.to === node.id);
+  const queue = src ? findNode(ctrl.graph, src.from) : undefined;
+  const vt = queue?.kind === 'queue' ? (queue as GraphNode<'queue'>).config.visibilityTimeout : null;
+  const editable = ctrl.hasConcept('lambda');
+  return (
+    <>
+      <p class="kv">
+        ~{c.processingTime}s por mensagem · timeout da função <b>{c.timeout}s</b>
+      </p>
+      {c.dbLimit > 0 && (
+        <p class="kv">
+          Banco de dados aguenta <b>{c.dbLimit}</b> conexões simultâneas (uma por invocação)
+        </p>
+      )}
+      {vt !== null && vt < c.timeout * 6 && (
+        <p class="locked-hint">Visibility timeout da fila ({vt}s) é menor que 6× o timeout da função ({c.timeout * 6}s), como a AWS recomenda.</p>
+      )}
+      {ctrl.hasConcept('batch') ? (
+        <NumberField
+          label="Batch size"
+          value={c.batchSize}
+          min={1}
+          max={10}
+          disabled={disabled}
+          onChange={(v) => set({ batchSize: v })}
+          help="Mensagens por invocação. Na AWS vai até 10.000 (com batching window)."
+        />
+      ) : (
+        <p class="kv">
+          Batch size: <b>{c.batchSize}</b>
+        </p>
+      )}
+      {editable ? (
+        <>
+          <Toggle
+            label="Report batch item failures"
+            checked={c.reportBatchItemFailures}
+            disabled={disabled}
+            onChange={(v) => set({ reportBatchItemFailures: v })}
+            help="A função devolve só os IDs das mensagens que falharam; o resto do lote é apagado."
+          />
+          <NumberField
+            label="Concorrência máxima (MaximumConcurrency)"
+            value={c.maxConcurrency}
+            min={0}
+            max={20}
+            disabled={disabled}
+            onChange={(v) => set({ maxConcurrency: v === 1 ? 2 : v })}
+            help={c.maxConcurrency === 0 ? 'Sem limite: escala enquanto houver fila (teto de 20 no jogo).' : 'Invocações simultâneas disparadas pela fila (mínimo 2 na AWS).'}
+          />
+        </>
+      ) : (
+        <Locked text="Configuração da função fixa nesta fase." />
+      )}
+    </>
   );
 }
 

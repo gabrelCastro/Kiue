@@ -43,6 +43,12 @@ export function queueSlot(n: GraphNode, i: number, out: Vector3): boolean {
   return true;
 }
 
+/** Posição de uma invocação ativa, num anel em volta da Lambda. */
+export function lambdaSlot(n: GraphNode, j: number, count: number, out: Vector3): void {
+  const a = (j / Math.max(1, count)) * Math.PI * 2 - Math.PI / 2;
+  out.set(n.x + Math.cos(a) * 1.05, 1.0, n.z + Math.sin(a) * 1.05);
+}
+
 /** Posição do "slot" de um worker sobre o consumidor. */
 export function workerSlot(n: GraphNode, j: number, count: number, out: Vector3): void {
   const perRow = Math.min(3, count);

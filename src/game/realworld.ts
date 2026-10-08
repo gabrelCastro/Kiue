@@ -25,7 +25,7 @@ const topicArn = (n: GraphNode) => `arn:aws:sns:${REGION}:${ACCOUNT}:${awsName(n
 
 export interface Snippet {
   title: string;
-  lang: 'bash' | 'ts' | 'json';
+  lang: 'bash' | 'ts' | 'json' | 'python';
   code: string;
   note?: string;
 }
@@ -40,7 +40,44 @@ export function snippetsFor(graph: Graph, node: GraphNode): Snippet[] {
       return consumerSnippets(graph, node as GraphNode<'consumer'>);
     case 'producer':
       return producerSnippets(graph, node as GraphNode<'producer'>);
+    case 'lambda':
+      return lambdaSnippets(graph, node as GraphNode<'lambda'>);
   }
+}
+
+function lambdaSnippets(graph: Graph, fn: GraphNode<'lambda'>): Snippet[] {
+  const c = fn.config;
+  const src = graph.edges.find((e) => e.to === fn.id);
+  const source = src ? findNode(graph, src.from) : undefined;
+  const name = awsName(fn).replace(/\.fifo$/, '');
+  const out: Snippet[] = [];
+  if (source?.kind === 'queue') {
+    const vt = (source as GraphNode<'queue'>).config.visibilityTimeout;
+    const flags = [`--function-name ${name}`, `--event-source-arn ${queueArn(source)}`, `--batch-size ${c.batchSize}`];
+    if (c.reportBatchItemFailures) flags.push('--function-response-types ReportBatchItemFailures');
+    if (c.maxConcurrency > 0) flags.push(`--scaling-config MaximumConcurrency=${Math.max(2, c.maxConcurrency)}`);
+    out.push({
+      title: 'Ligar a fila à função (event source mapping)',
+      lang: 'bash',
+      code: `aws lambda create-event-source-mapping \\\n  ${flags.join(' \\\n  ')}`,
+      note:
+        vt < c.timeout * 6
+          ? `Atenção: a AWS recomenda visibility timeout da fila ≥ 6× o timeout da função (aqui: ${vt}s < ${c.timeout * 6}s).`
+          : 'A AWS recomenda visibility timeout da fila ≥ 6× o timeout da função.',
+    });
+  }
+  out.push({ title: 'Timeout da função', lang: 'bash', code: `aws lambda update-function-configuration \\\n  --function-name ${name} \\\n  --timeout ${c.timeout}` });
+  const body = c.reportBatchItemFailures
+    ? `export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {\n  const batchItemFailures: SQSBatchItemFailure[] = [];\n  for (const record of event.Records) {\n    try {\n      await processar(JSON.parse(record.body));\n    } catch {\n      // só esta mensagem volta para a fila\n      batchItemFailures.push({ itemIdentifier: record.messageId });\n    }\n  }\n  return { batchItemFailures };\n};`
+    : `export const handler = async (event: SQSEvent): Promise<void> => {\n  for (const record of event.Records) {\n    // se uma mensagem lançar erro, o lote INTEIRO volta para a fila,\n    // inclusive as que já foram processadas\n    await processar(JSON.parse(record.body));\n  }\n};`;
+  const types = c.reportBatchItemFailures ? 'SQSBatchItemFailure, SQSBatchResponse, SQSEvent' : 'SQSEvent';
+  out.push({
+    title: 'Handler (TypeScript)',
+    lang: 'ts',
+    code: `import type { ${types} } from 'aws-lambda';\n\n${body}`,
+    note: c.reportBatchItemFailures ? 'Exige --function-response-types ReportBatchItemFailures no event source mapping.' : undefined,
+  });
+  return out;
 }
 
 function queueSnippets(graph: Graph, q: GraphNode<'queue'>): Snippet[] {
@@ -66,6 +103,20 @@ function queueSnippets(graph: Graph, q: GraphNode<'queue'>): Snippet[] {
     },
   ];
   const isDlqOf = graph.nodes.filter((n) => n.kind === 'queue' && (n as GraphNode<'queue'>).config.dlq === q.id);
+  const subs = graph.edges.filter((e) => e.dlq === q.id);
+  if (subs.length) {
+    out.push({
+      title: 'DLQ de assinatura SNS',
+      lang: 'bash',
+      code: subs
+        .map((e) => {
+          const t = findNode(graph, e.from);
+          return `# assinatura ${t?.name} → ${findNode(graph, e.to)?.name}\naws sns set-subscription-attributes \\\n  --subscription-arn <arn-da-assinatura> \\\n  --attribute-name RedrivePolicy \\\n  --attribute-value '{"deadLetterTargetArn":"${queueArn(q)}"}'`;
+        })
+        .join('\n\n'),
+      note: 'A fila também precisa de uma policy permitindo sqs:SendMessage a partir do tópico.',
+    });
+  }
   if (isDlqOf.length) {
     out.push({
       title: 'Alarme para a DLQ (CloudWatch)',
@@ -102,6 +153,20 @@ function topicSnippets(graph: Graph, t: GraphNode<'topic'>): Snippet[] {
   for (const e of graph.edges.filter((x) => x.from === t.id)) {
     const q = findNode(graph, e.to);
     if (!q) continue;
+    if (q.kind === 'consumer') {
+      const attrs: Record<string, string> = {};
+      const dlq = e.dlq ? findNode(graph, e.dlq) : undefined;
+      if (dlq) attrs.RedrivePolicy = JSON.stringify({ deadLetterTargetArn: queueArn(dlq) });
+      if (e.filterPolicy && Object.keys(e.filterPolicy).length) attrs.FilterPolicy = JSON.stringify(e.filterPolicy);
+      const attrFlag = Object.keys(attrs).length ? ` \\\n  --attributes '${JSON.stringify(attrs)}'` : '';
+      out.push({
+        title: `Assinatura HTTPS → ${q.name}`,
+        lang: 'bash',
+        code: `aws sns subscribe \\\n  --topic-arn ${topicArn(t)} \\\n  --protocol https \\\n  --notification-endpoint https://${awsName(q)}.exemplo.com/sns${attrFlag}`,
+        note: `O endpoint precisa confirmar a assinatura (SubscriptionConfirmation). Se ele falhar, o SNS tenta de novo conforme a delivery policy (padrão HTTP/S: 3 retries com 20 s de intervalo)${dlq ? '; esgotadas as tentativas, a mensagem vai para a DLQ da assinatura' : ' e depois descarta a mensagem'}.`,
+      });
+      continue;
+    }
     const subAttrs: Record<string, string> = { RawMessageDelivery: 'true' };
     if (e.filterPolicy && Object.keys(e.filterPolicy).length) subAttrs.FilterPolicy = JSON.stringify(e.filterPolicy);
     out.push({
@@ -120,6 +185,16 @@ function consumerSnippets(graph: Graph, c: GraphNode<'consumer'>): Snippet[] {
   const cfg = c.config;
   const src = graph.edges.find((e) => e.to === c.id);
   const source = src ? findNode(graph, src.from) : undefined;
+  if (source?.kind === 'topic') {
+    return [
+      {
+        title: 'Endpoint HTTPS assinado no SNS',
+        lang: 'ts',
+        code: `app.post('/sns', async (req, res) => {\n  const msg = req.body;\n  if (msg.Type === 'SubscriptionConfirmation') {\n    await fetch(msg.SubscribeURL); // confirma a assinatura\n    return res.sendStatus(200);\n  }\n  await processar(JSON.parse(msg.Message));\n  res.sendStatus(200); // qualquer erro ou timeout faz o SNS tentar de novo\n});`,
+        note: 'Em produção, valide a assinatura da mensagem SNS (SigningCertURL).',
+      },
+    ];
+  }
   if (!source || source.kind !== 'queue') {
     return [
       {
@@ -145,6 +220,16 @@ function consumerSnippets(graph: Graph, c: GraphNode<'consumer'>): Snippet[] {
       code: `import { SQSClient, ${imports} } from '@aws-sdk/client-sqs';\n\nconst sqs = new SQSClient({ region: '${REGION}' });\nconst QueueUrl = '${queueUrl(source)}';\n\nwhile (true) {\n  const { Messages = [] } = await sqs.send(new ReceiveMessageCommand({\n    QueueUrl,\n    MaxNumberOfMessages: ${cfg.batchSize},\n    WaitTimeSeconds: ${cfg.waitTime},${cfg.waitTime === 0 ? ' // short polling: volta na hora, mesmo vazio' : ' // long polling'}\n  }));\n  const ok = [];\n  for (const m of Messages) {\n    try {\n      const pedido = JSON.parse(m.Body!);\n${idem}      await processar(pedido);\n      ok.push(m);\n    } catch (err) {\n      // não apaga: a mensagem volta após o visibility timeout${fifo ? '\n      // (FIFO: o grupo fica bloqueado até ela ser apagada ou ir para a DLQ)' : ''}\n    }\n  }\n${del}\n}`,
       note: `Rodando ${cfg.workers} ${cfg.workers === 1 ? 'instância' : 'instâncias'} deste loop em paralelo.`,
     },
+    ...(cfg.heartbeat
+      ? [
+          {
+            title: 'Heartbeat durante o processamento',
+            lang: 'ts' as const,
+            code: `import { ChangeMessageVisibilityCommand } from '@aws-sdk/client-sqs';\n\nconst VT = ${(source as GraphNode<'queue'>).config.visibilityTimeout}; // visibility timeout da fila (s)\nconst timer = setInterval(() => {\n  sqs.send(new ChangeMessageVisibilityCommand({\n    QueueUrl,\n    ReceiptHandle: m.ReceiptHandle!,\n    VisibilityTimeout: VT, // "mais VT segundos a partir de agora"\n  }));\n}, VT * 600); // renova com folga, antes de expirar\ntry {\n  await processar(pedido);\n} finally {\n  clearInterval(timer);\n}`,
+            note: 'Se o processo cair, o heartbeat para e a mensagem volta em até um visibility timeout.',
+          },
+        ]
+      : []),
   ];
 }
 
@@ -155,6 +240,19 @@ function producerSnippets(graph: Graph, p: GraphNode<'producer'>): Snippet[] {
   const group = cfg.groups > 0 ? `\n  MessageGroupId: pedido.clienteId, // ordem por cliente` : '';
   const dedup = cfg.dedupId ? `\n  MessageDeduplicationId: \`pedido-\${pedido.id}\`,` : '';
   const attrs = `\n  MessageAttributes: {\n    tipo: { DataType: 'String', StringValue: pedido.tipo },\n  },`;
+  const extended: Snippet[] =
+    cfg.largeRate > 0
+      ? [
+          {
+            title: cfg.extendedClient ? 'Extended Client (anexos no S3)' : 'Anexos grandes',
+            lang: cfg.extendedClient ? 'python' : 'ts',
+            code: cfg.extendedClient
+              ? `# Python: amazon-sqs-extended-client\nimport boto3\nimport sqs_extended_client  # adiciona suporte a payload grande ao client\n\nsqs = boto3.client('sqs')\nsqs.large_payload_support = 'notas-fiscais-bucket'\nsqs.use_legacy_attribute = False\n\n# acima do limite, o corpo vai para o S3 e a fila recebe só o ponteiro\nsqs.send_message(QueueUrl=QUEUE_URL, MessageBody=pdf_em_base64)`
+              : `// ${cfg.largeKb} KB não cabe numa mensagem SQS (máximo 1 MiB)\n// e cada bloco de 64 KB já é cobrado como uma requisição.\n// Guarde o arquivo no S3 e envie só a referência,\n// ou use o Extended Client, que faz isso automaticamente.`,
+            note: 'O Extended Client existe para Java e Python; o consumidor também precisa usá-lo para buscar o payload no S3.',
+          },
+        ]
+      : [];
   if (target?.kind === 'topic') {
     return [
       {
@@ -172,6 +270,7 @@ function producerSnippets(graph: Graph, p: GraphNode<'producer'>): Snippet[] {
         code: `import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';\n\nconst sqs = new SQSClient({ region: '${REGION}' });\n\nawait sqs.send(new SendMessageCommand({\n  QueueUrl: '${queueUrl(target)}',\n  MessageBody: JSON.stringify(pedido),${attrs}${group}${dedup}\n}));`,
         note: cfg.retryRate > 0 ? 'O SDK faz retry automático em erros de rede, e isso pode gerar duplicatas.' : undefined,
       },
+      ...extended,
     ];
   }
   if (target?.kind === 'consumer') {

@@ -1,4 +1,5 @@
 import type { Controller } from '../game/controller';
+import { dlqIds } from '../game/graph';
 import type { Simulation } from '../sim/engine';
 import type { GraphNode } from '../sim/types';
 
@@ -29,6 +30,7 @@ export function describeNode(node: GraphNode, ctrl: Controller, sim: Simulation 
       if (cfg.groups > 0) badges.push(badge(`${cfg.groups} grupos`));
       if (cfg.poisonRate > 0) badges.push(badge('venenosas', 'bad'));
       if (cfg.retryRate > 0) badges.push(badge('retries', 'warn'));
+      if (cfg.largeRate > 0) badges.push(badge(cfg.extendedClient ? 'anexos → S3' : 'anexos grandes', cfg.extendedClient ? 'ok' : 'warn'));
       break;
     }
     case 'topic': {
@@ -41,7 +43,7 @@ export function describeNode(node: GraphNode, ctrl: Controller, sim: Simulation 
     }
     case 'queue': {
       const cfg = (node as GraphNode<'queue'>).config;
-      const isDlq = ctrl.graph.nodes.some((n) => n.kind === 'queue' && (n as GraphNode<'queue'>).config.dlq === node.id);
+      const isDlq = dlqIds(ctrl.graph).has(node.id);
       badges.push(badge('SQS', 'sqs'));
       if (cfg.fifo) badges.push(badge('FIFO', 'fifo'));
       if (isDlq) badges.push(badge('DLQ', 'bad'));
@@ -73,9 +75,26 @@ export function describeNode(node: GraphNode, ctrl: Controller, sim: Simulation 
         parts.push(cfg.waitTime > 0 ? `long poll ${cfg.waitTime}s` : 'short poll');
         lines.push(parts.join(' · '));
       }
+      if (cfg.httpOnly) badges.push(badge('HTTPS'));
       if (cfg.idempotent) badges.push(badge('idempotente', 'ok'));
+      if (cfg.heartbeat) badges.push(badge('heartbeat', 'ok'));
       if (cfg.interest) badges.push(badge(`só ${cfg.interest.join('/')}`));
       if (cfg.outages.length) badges.push(badge('manutenção', 'warn'));
+      break;
+    }
+    case 'lambda': {
+      const cfg = (node as GraphNode<'lambda'>).config;
+      badges.push(badge('Lambda', 'lambda'));
+      if (cfg.reportBatchItemFailures) badges.push(badge('falha parcial', 'ok'));
+      if (cfg.dbLimit > 0) badges.push(badge(`banco: ${cfg.dbLimit} conexões`, 'warn'));
+      const c = sim?.consumers.get(node.id);
+      if (c && sim) {
+        const done = sim.metrics.processedBy.get(node.id)?.size ?? 0;
+        const busy = c.workers.filter((w) => w.state === 'processing' || w.state === 'receiving').length;
+        lines.push(`✓ <b>${done}</b> · ${busy} invocações · conc. ${c.active}/${c.workers.length}`);
+      } else {
+        lines.push(`lote ${cfg.batchSize} · timeout ${cfg.timeout}s · conc. máx. ${cfg.maxConcurrency > 0 ? cfg.maxConcurrency : 'sem limite'}`);
+      }
       break;
     }
   }

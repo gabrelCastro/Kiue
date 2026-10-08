@@ -31,7 +31,7 @@ export function Menu() {
       <Track title="Trilha Iniciante" subtitle="Do zero: filas, fan-out, DLQ, ordem e custo." levels={LEVELS.filter((l) => l.track === 'iniciante')} />
       <Track
         title="Trilha Certificação"
-        subtitle="Detalhes que caem na prova AWS Developer / Solutions Architect. Libera após a fase 5 da trilha Iniciante."
+        subtitle="Detalhes que caem na prova AWS Developer / Solutions Architect: Lambda, heartbeat, retries do SNS, cotas e limites. Libera após a fase 5 da trilha Iniciante."
         levels={LEVELS.filter((l) => l.track === 'certificacao')}
       />
       <footer class="menu-footer muted small">

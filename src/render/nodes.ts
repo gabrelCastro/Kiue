@@ -1,5 +1,7 @@
 import {
   BoxGeometry,
+  CanvasTexture,
+  PlaneGeometry,
   ConeGeometry,
   CylinderGeometry,
   Group,
@@ -10,6 +12,7 @@ import {
   type Object3D,
 } from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { lambdaCap } from '../sim/engine';
 import type { GraphNode } from '../sim/types';
 import { QUEUE_LEN } from './layout';
 
@@ -19,7 +22,23 @@ export const NODE_COLORS = {
   queue: '#fb923c',
   dlq: '#ef4444',
   consumer: '#34d399',
+  lambda: '#f59e0b',
 };
+
+let lambdaTexture: CanvasTexture | null = null;
+function lambdaGlyph(): CanvasTexture {
+  if (lambdaTexture) return lambdaTexture;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 104px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('λ', 64, 70);
+  lambdaTexture = new CanvasTexture(canvas);
+  return lambdaTexture;
+}
 
 export interface NodeView {
   node: GraphNode;
@@ -134,6 +153,26 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
       }
       pickables.push(body);
       labelY = 1.75;
+      break;
+    }
+    case 'lambda': {
+      baseColor = NODE_COLORS.lambda;
+      body = shadowed(new Mesh(new CylinderGeometry(0.8, 0.8, 0.8, 6), mat(baseColor, { flatShading: true })));
+      body.position.y = 0.4;
+      const glyph = new Mesh(new PlaneGeometry(0.9, 0.9), new MeshStandardMaterial({ map: lambdaGlyph(), transparent: true, depthWrite: false }));
+      glyph.rotation.x = -Math.PI / 2;
+      glyph.position.y = 0.81;
+      group.add(body, glyph);
+      const slots = lambdaCap((node as GraphNode<'lambda'>).config);
+      for (let j = 0; j < slots; j++) {
+        const a = (j / slots) * Math.PI * 2 - Math.PI / 2;
+        const pad = new Mesh(new CylinderGeometry(0.09, 0.09, 0.05, 10), mat('#1e293b'));
+        pad.position.set(Math.cos(a) * 1.05, 0.03, Math.sin(a) * 1.05);
+        group.add(pad);
+        workerPads.push(pad);
+      }
+      pickables.push(body);
+      labelY = 1.6;
       break;
     }
   }

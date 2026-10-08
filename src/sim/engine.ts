@@ -4,10 +4,11 @@ import { DEDUP_WINDOW_MS, SqsQueue, type QueueContext, type QueueMessage } from 
 import { Rng } from './rng';
 import {
   DEFAULT_SIM_OPTIONS,
-  type ConsumerConfig,
   type Graph,
   type GraphEdge,
   type GraphNode,
+  type LambdaConfig,
+  type Outage,
   type ProducerConfig,
   type SimEvent,
   type SimOptions,
@@ -21,6 +22,23 @@ export const RECEIVE_MS = 300;
 export const RETRY_DELAY_MS = 400;
 /** Intervalo do loop de short polling de um worker (um `while(true)` sem sleep, limitado pela rede). */
 export const SHORT_POLL_INTERVAL_MS = 200;
+/** Lambda: lotes simultâneos no início, teto do jogo e ritmo de escala. */
+export const LAMBDA_START_CONCURRENCY = 5;
+export const LAMBDA_MAX_CONCURRENCY = 20;
+const LAMBDA_SCALE_UP_MS = 1000;
+const LAMBDA_SCALE_DOWN_MS = 3000;
+const LAMBDA_DB_REJECT_MS = 200;
+/** SNS → HTTP: retries de entrega (reduzidos para a escala do jogo). */
+export const SNS_RETRIES = 3;
+export const SNS_RETRY_MS = 5000;
+/** Limites de tamanho (KB) e bloco de cobrança. */
+export const SQS_MAX_KB = 1024;
+export const SNS_MAX_KB = 256;
+export const BILLING_CHUNK_KB = 64;
+/** Acima disso o Extended Client manda o payload para o S3. */
+export const EXTENDED_THRESHOLD_KB = 256;
+const NORMAL_SIZE_KB = 2;
+const HEARTBEAT_FRACTION = 0.4;
 const EVENT_LOG_CAP = 400;
 
 export type TransitKind = 'deliver' | 'receive' | 'dlq';
@@ -33,11 +51,21 @@ export interface Transit {
   start: number;
   end: number;
   kind: TransitKind;
+  /** Assinatura SNS que gerou a entrega (push para endpoint) e a tentativa atual. */
+  edgeId?: string;
+  attempt?: number;
 }
 
 interface PendingSend {
   at: number;
   token: Token;
+}
+
+interface PendingSnsRetry {
+  at: number;
+  edge: GraphEdge;
+  token: Token;
+  attempt: number;
 }
 
 export interface ProducerState {
@@ -59,6 +87,9 @@ export interface BatchItem {
   token: Token;
   receipt: number | null;
   ok: boolean;
+  /** Entrega push vinda de uma assinatura SNS (falha → retry do SNS). */
+  snsEdge?: GraphEdge;
+  attempt?: number;
 }
 
 export interface Worker {
@@ -68,12 +99,33 @@ export interface Worker {
   nextPollAt: number;
   batch: BatchItem[];
   index: number;
+  /** Lambda: início da invocação e motivo de falha já decidido. */
+  invocationStart: number;
+  failReason: 'timeout' | 'db' | null;
+}
+
+/** Configuração comum a consumidores e Lambdas, como o motor a usa. */
+export interface RuntimeConsumer {
+  batchSize: number;
+  waitTime: number;
+  processingTime: number;
+  jitter: number;
+  failRate: number;
+  idempotent: boolean;
+  interest: string[] | null;
+  outages: Outage[];
+  heartbeat: boolean;
 }
 
 export interface ConsumerState {
-  node: GraphNode<'consumer'>;
+  node: GraphNode<'consumer'> | GraphNode<'lambda'>;
+  cfg: RuntimeConsumer;
+  lambda: LambdaConfig | null;
   source: GraphNode | null;
   workers: Worker[];
+  /** Workers habilitados. A Lambda escala esse número; um consumidor comum usa todos. */
+  active: number;
+  lastScale: number;
   down: boolean;
   /** Consumidores que leem da mesma fila são instâncias do mesmo serviço e compartilham este estado. */
   service: ServiceState;
@@ -82,6 +134,14 @@ export interface ConsumerState {
 export interface ServiceState {
   processed: Set<number>;
   maxSeq: Map<string, number>;
+}
+
+export function lambdaCap(cfg: LambdaConfig): number {
+  return cfg.maxConcurrency > 0 ? Math.min(cfg.maxConcurrency, LAMBDA_MAX_CONCURRENCY) : LAMBDA_MAX_CONCURRENCY;
+}
+
+function newWorker(): Worker {
+  return { state: 'idle', until: 0, start: 0, nextPollAt: 0, batch: [], index: 0, invocationStart: 0, failReason: null };
 }
 
 export class Simulation {
@@ -98,8 +158,10 @@ export class Simulation {
   readonly consumers = new Map<string, ConsumerState>();
   readonly nodes = new Map<string, GraphNode>();
   private outgoing = new Map<string, GraphEdge[]>();
+  private edges = new Map<string, GraphEdge>();
   private services = new Map<string, ServiceState>();
   private dlqIds = new Set<string>();
+  private snsRetries: PendingSnsRetry[] = [];
   private nextCopy = 1;
   private nextLogical = 1;
   private nextReceiptId = 1;
@@ -118,6 +180,8 @@ export class Simulation {
       const list = this.outgoing.get(e.from) ?? [];
       list.push(e);
       this.outgoing.set(e.from, list);
+      this.edges.set(e.id, e);
+      if (e.dlq) this.dlqIds.add(e.dlq);
     }
 
     for (const n of graphCopy.nodes) {
@@ -140,29 +204,10 @@ export class Simulation {
           if (q.config.dlq) this.dlqIds.add(q.config.dlq);
           break;
         }
-        case 'consumer': {
-          const cfg = (n as GraphNode<'consumer'>).config;
-          const incoming = graphCopy.edges.find((e) => e.to === n.id);
-          const source = incoming ? (this.nodes.get(incoming.from) ?? null) : null;
-          const serviceKey = source?.kind === 'queue' ? `q:${source.id}` : `c:${n.id}`;
-          let service = this.services.get(serviceKey);
-          if (!service) this.services.set(serviceKey, (service = { processed: new Set(), maxSeq: new Map() }));
-          this.consumers.set(n.id, {
-            node: n as GraphNode<'consumer'>,
-            source,
-            workers: Array.from({ length: Math.max(1, cfg.workers) }, () => ({
-              state: 'idle' as WorkerState,
-              until: 0,
-              start: 0,
-              nextPollAt: 0,
-              batch: [],
-              index: 0,
-            })),
-            down: false,
-            service,
-          });
+        case 'consumer':
+        case 'lambda':
+          this.consumers.set(n.id, this.createConsumer(n, graphCopy));
           break;
-        }
       }
     }
 
@@ -176,6 +221,55 @@ export class Simulation {
       nextReceipt: () => this.nextReceiptId++,
       cloneToken: (t) => ({ ...t, copyId: this.nextCopy++ }),
       moveToDlq: (from, msg) => this.moveToDlq(from, msg),
+    };
+  }
+
+  private createConsumer(n: GraphNode, graph: Graph): ConsumerState {
+    const incoming = graph.edges.find((e) => e.to === n.id);
+    const source = incoming ? (this.nodes.get(incoming.from) ?? null) : null;
+    const serviceKey = source?.kind === 'queue' ? `q:${source.id}` : `c:${n.id}`;
+    let service = this.services.get(serviceKey);
+    if (!service) this.services.set(serviceKey, (service = { processed: new Set(), maxSeq: new Map() }));
+
+    if (n.kind === 'lambda') {
+      const l = (n as GraphNode<'lambda'>).config;
+      const cap = lambdaCap(l);
+      const active = Math.min(LAMBDA_START_CONCURRENCY, cap);
+      this.metrics.peakConcurrency.set(n.id, active);
+      return {
+        node: n as GraphNode<'lambda'>,
+        cfg: {
+          batchSize: l.batchSize,
+          waitTime: 20,
+          processingTime: l.processingTime,
+          jitter: l.jitter,
+          failRate: l.failRate,
+          idempotent: l.idempotent,
+          interest: l.interest,
+          outages: [],
+          heartbeat: false,
+        },
+        lambda: l,
+        source,
+        workers: Array.from({ length: cap }, newWorker),
+        active,
+        lastScale: 0,
+        down: false,
+        service,
+      };
+    }
+    const cfg = (n as GraphNode<'consumer'>).config;
+    const workers = Math.max(1, cfg.workers);
+    return {
+      node: n as GraphNode<'consumer'>,
+      cfg,
+      lambda: null,
+      source,
+      workers: Array.from({ length: workers }, newWorker),
+      active: workers,
+      lastScale: 0,
+      down: false,
+      service,
     };
   }
 
@@ -193,8 +287,8 @@ export class Simulation {
     for (const l of this.listeners) l(e);
   }
 
-  private call(api: ApiName) {
-    this.metrics.call(api);
+  private call(api: ApiName, n = 1) {
+    this.metrics.call(api, n);
   }
 
   get durationMs() {
@@ -206,6 +300,7 @@ export class Simulation {
     if (this.finished) return;
     this.now += TICK_MS;
     for (const p of this.producers.values()) this.tickProducer(p);
+    this.tickSnsRetries();
     this.tickTransits();
     for (const q of this.queues.values()) {
       q.tick(this.ctx);
@@ -266,6 +361,7 @@ export class Simulation {
     p.seqByGroup.set(seqKey, seq);
     const type = cfg.types.length ? this.rng.weighted(cfg.types).value : 'pedido';
     const poison = this.rng.chance(cfg.poisonRate);
+    const large = this.rng.chance(cfg.largeRate);
     const token: Token = {
       copyId: this.nextCopy++,
       logicalId,
@@ -277,7 +373,14 @@ export class Simulation {
       body: JSON.stringify({ pedido: logicalId, tipo: type, seq }),
       createdAt: this.now,
       producerId: p.node.id,
+      sizeKb: large ? cfg.largeKb : NORMAL_SIZE_KB,
+      s3: false,
     };
+    if (cfg.extendedClient && token.sizeKb > EXTENDED_THRESHOLD_KB) {
+      this.emit({ t: this.now, type: 's3_put', node: p.node.id, token });
+      token.s3 = true;
+      token.sizeKb = 1;
+    }
     this.send(p, token, false);
     if (this.rng.chance(cfg.retryRate)) {
       p.pending.push({ at: this.now + RETRY_DELAY_MS, token: { ...token, copyId: this.nextCopy++ } });
@@ -289,22 +392,33 @@ export class Simulation {
     this.emit({ t: this.now, type: 'produced', node: id, token, retry });
     const edge = this.outgoing.get(id)?.[0];
     const target = edge ? this.nodes.get(edge.to) : undefined;
+    const fail = (reason: string) =>
+      this.emit({ t: this.now, type: 'send_error', node: id, target: target?.id ?? '', token, reason });
     if (!target) {
-      this.emit({ t: this.now, type: 'send_error', node: id, target: '', token, reason: 'produtor sem destino' });
+      fail('produtor sem destino');
       return;
     }
+    const chunks = Math.max(1, Math.ceil(token.sizeKb / BILLING_CHUNK_KB));
     if (target.kind === 'queue') {
-      this.call('SendMessage');
+      this.call('SendMessage', chunks);
+      if (token.sizeKb > SQS_MAX_KB) {
+        fail(`MessageTooLong: ${token.sizeKb} KB passa do limite de 1 MiB do SQS`);
+        return;
+      }
       const res = this.queues.get(target.id)!.validateSend(token);
       if (!res.ok) {
-        this.emit({ t: this.now, type: 'send_error', node: id, target: target.id, token, reason: res.reason });
+        fail(res.reason);
         return;
       }
     } else if (target.kind === 'topic') {
-      this.call('Publish');
+      this.call('Publish', chunks);
+      if (token.sizeKb > SNS_MAX_KB) {
+        fail(`mensagem de ${token.sizeKb} KB passa do limite de 256 KB do SNS`);
+        return;
+      }
       const res = this.validatePublish(this.topics.get(target.id)!.node.config, token);
       if (!res.ok) {
-        this.emit({ t: this.now, type: 'send_error', node: id, target: target.id, token, reason: res.reason });
+        fail(res.reason);
         return;
       }
     }
@@ -321,8 +435,15 @@ export class Simulation {
 
   // ───────────────────────── Trânsito ─────────────────────────
 
-  private startTransit(token: Token, from: string, to: string, kind: TransitKind, duration: number) {
-    this.transits.push({ id: this.nextTransit++, token, from, to, start: this.now, end: this.now + duration, kind });
+  private startTransit(
+    token: Token,
+    from: string,
+    to: string,
+    kind: TransitKind,
+    duration: number,
+    extra: Pick<Transit, 'edgeId' | 'attempt'> = {},
+  ) {
+    this.transits.push({ id: this.nextTransit++, token, from, to, start: this.now, end: this.now + duration, kind, ...extra });
   }
 
   private tickTransits() {
@@ -349,7 +470,8 @@ export class Simulation {
       } else if (target.kind === 'topic') {
         this.publish(this.topics.get(target.id)!, t.token);
       } else if (target.kind === 'consumer') {
-        this.push(this.consumers.get(target.id)!, t.token);
+        const edge = t.edgeId ? this.edges.get(t.edgeId) : undefined;
+        this.push(this.consumers.get(target.id)!, t.token, edge, t.attempt ?? 0);
       }
     }
   }
@@ -377,7 +499,32 @@ export class Simulation {
         continue;
       }
       const copy: Token = { ...token, copyId: this.nextCopy++, dedupId };
-      this.startTransit(copy, id, edge.to, 'deliver', DELIVER_MS);
+      this.startTransit(copy, id, edge.to, 'deliver', DELIVER_MS, { edgeId: edge.id, attempt: 0 });
+    }
+  }
+
+  /** Entrega SNS → endpoint falhou: tenta de novo, manda para a DLQ da assinatura ou perde. */
+  private snsDeliveryFailed(edge: GraphEdge, token: Token, attempt: number) {
+    if (attempt < SNS_RETRIES) {
+      this.emit({ t: this.now, type: 'sns_retry', node: edge.from, target: edge.to, token, attempt: attempt + 1 });
+      this.snsRetries.push({ at: this.now + SNS_RETRY_MS, edge, token, attempt: attempt + 1 });
+      return;
+    }
+    if (edge.dlq && this.queues.has(edge.dlq)) {
+      this.emit({ t: this.now, type: 'sns_dlq', node: edge.from, target: edge.to, dlq: edge.dlq, token });
+      this.startTransit(token, edge.from, edge.dlq, 'dlq', DELIVER_MS);
+      return;
+    }
+    this.emit({ t: this.now, type: 'dropped', node: edge.to, token });
+  }
+
+  private tickSnsRetries() {
+    if (!this.snsRetries.length) return;
+    const due = this.snsRetries.filter((r) => r.at <= this.now);
+    if (!due.length) return;
+    this.snsRetries = this.snsRetries.filter((r) => r.at > this.now);
+    for (const r of due) {
+      this.startTransit(r.token, r.edge.from, r.edge.to, 'deliver', DELIVER_MS, { edgeId: r.edge.id, attempt: r.attempt });
     }
   }
 
@@ -398,25 +545,32 @@ export class Simulation {
 
   // ───────────────────────── Consumidores ─────────────────────────
 
-  private inOutage(cfg: ConsumerConfig): boolean {
+  private inOutage(cfg: RuntimeConsumer): boolean {
     const t = this.now / 1000;
     return cfg.outages.some((o) => t >= o.from && t < o.to);
   }
 
-  /** Entrega síncrona (produtor ligado direto no consumidor). */
-  private push(c: ConsumerState, token: Token) {
+  /** Mensagem perdida numa entrega push (sem fila): vira retry se veio do SNS. */
+  private pushFailed(item: BatchItem) {
+    if (item.snsEdge) this.snsDeliveryFailed(item.snsEdge, item.token, item.attempt ?? 0);
+    else this.metrics.lose(item.token.logicalId);
+  }
+
+  /** Entrega push: produtor ligado direto no consumidor, ou SNS → endpoint HTTP. */
+  private push(c: ConsumerState, token: Token, snsEdge: GraphEdge | undefined, attempt: number) {
     const w = c.down ? undefined : c.workers.find((w) => w.state === 'idle');
     if (!w) {
-      this.emit({ t: this.now, type: 'dropped', node: c.node.id, token });
+      if (snsEdge) this.snsDeliveryFailed(snsEdge, token, attempt);
+      else this.emit({ t: this.now, type: 'dropped', node: c.node.id, token });
       return;
     }
-    w.batch = [{ token, receipt: null, ok: false }];
+    w.batch = [{ token, receipt: null, ok: false, snsEdge, attempt }];
     w.index = 0;
     this.startProcessing(c, w);
   }
 
   private tickConsumer(c: ConsumerState) {
-    const cfg = c.node.config;
+    const cfg = c.cfg;
     const down = this.inOutage(cfg);
     if (down && !c.down) {
       c.down = true;
@@ -426,7 +580,7 @@ export class Simulation {
           const item = w.batch[w.index];
           if (item) {
             this.emit({ t: this.now, type: 'process_failed', node: c.node.id, token: item.token, reason: 'outage' });
-            if (item.receipt === null) this.metrics.lose(item.token.logicalId);
+            if (item.receipt === null) this.pushFailed(item);
           }
         }
         w.state = 'down';
@@ -443,10 +597,13 @@ export class Simulation {
     if (c.down) return;
 
     const queue = c.source?.kind === 'queue' ? this.queues.get(c.source.id) : undefined;
-    for (const w of c.workers) {
+    if (c.lambda && queue) this.scaleLambda(c, queue);
+    if (cfg.heartbeat && queue) this.heartbeat(c, queue);
+
+    c.workers.forEach((w, j) => {
       switch (w.state) {
         case 'idle':
-          if (queue && this.now >= w.nextPollAt) {
+          if (queue && j < c.active && this.now >= w.nextPollAt) {
             this.call('ReceiveMessage');
             const shortPoll = cfg.waitTime <= 0;
             const msgs = queue.receive(this.batchSize(cfg), c.node.id, this.ctx, shortPoll ? this.options.shortPollEmptyRate : 0);
@@ -472,17 +629,54 @@ export class Simulation {
           }
           break;
         case 'receiving':
-          if (this.now >= w.until) this.startProcessing(c, w);
+          if (this.now >= w.until) {
+            if (c.lambda) this.startInvocation(c, w);
+            else this.startProcessing(c, w);
+          }
           break;
         case 'processing':
           if (this.now >= w.until) this.finishItem(c, w, queue);
           break;
       }
+    });
+  }
+
+  private batchSize(cfg: RuntimeConsumer) {
+    return Math.max(1, Math.min(10, Math.round(cfg.batchSize)));
+  }
+
+  /** Lambda: sobe a concorrência enquanto houver fila; desce quando ela esvazia. */
+  private scaleLambda(c: ConsumerState, queue: SqsQueue) {
+    const cap = c.workers.length;
+    const floor = Math.min(LAMBDA_START_CONCURRENCY, cap);
+    const backlog = queue.counts(this.now).visible;
+    const since = this.now - c.lastScale;
+    let next = c.active;
+    if (backlog > 0 && c.active < cap && since >= LAMBDA_SCALE_UP_MS) next++;
+    else if (backlog === 0 && c.active > floor && since >= LAMBDA_SCALE_DOWN_MS) next--;
+    if (next !== c.active) {
+      c.active = next;
+      c.lastScale = this.now;
+      this.emit({ t: this.now, type: 'scaled', node: c.node.id, concurrency: next });
     }
   }
 
-  private batchSize(cfg: ConsumerConfig) {
-    return Math.max(1, Math.min(10, Math.round(cfg.batchSize)));
+  /** ChangeMessageVisibility para as mensagens do lote que estão perto de reaparecer. */
+  private heartbeat(c: ConsumerState, queue: SqsQueue) {
+    const vt = queue.config.visibilityTimeout * 1000;
+    for (const w of c.workers) {
+      if (w.state !== 'processing' && w.state !== 'receiving') continue;
+      let extended = 0;
+      for (const b of w.batch) {
+        if (b.receipt === null) continue;
+        const m = queue.messages.find((x) => x.receipt === b.receipt && x.inFlight);
+        if (m && m.visibleAt - this.now < vt * HEARTBEAT_FRACTION && queue.extendVisibility(b.receipt, this.now)) extended++;
+      }
+      if (extended) {
+        this.call(extended > 1 ? 'ChangeMessageVisibilityBatch' : 'ChangeMessageVisibility');
+        this.emit({ t: this.now, type: 'visibility_extended', node: c.node.id, count: extended });
+      }
+    }
   }
 
   private startReceive(c: ConsumerState, w: Worker, queue: SqsQueue, msgs: QueueMessage[]) {
@@ -494,27 +688,69 @@ export class Simulation {
     for (const m of msgs) this.startTransit(m.token, queue.id, c.node.id, 'receive', RECEIVE_MS);
   }
 
+  /** Lambda: uma invocação recebe o lote inteiro. */
+  private startInvocation(c: ConsumerState, w: Worker) {
+    const l = c.lambda!;
+    this.metrics.invocations++;
+    w.invocationStart = this.now;
+    w.failReason = null;
+    const running = c.workers.filter((x) => x.state === 'processing').length + 1;
+    if (l.dbLimit > 0 && running > l.dbLimit) {
+      w.failReason = 'db';
+      w.state = 'processing';
+      w.start = this.now;
+      w.until = this.now + LAMBDA_DB_REJECT_MS;
+      return;
+    }
+    this.startProcessing(c, w);
+  }
+
   private startProcessing(c: ConsumerState, w: Worker) {
-    const cfg = c.node.config;
+    const cfg = c.cfg;
     const factor = 1 + cfg.jitter * (this.rng.next() * 2 - 1);
     w.state = 'processing';
     w.start = this.now;
     w.until = this.now + Math.max(TICK_MS, cfg.processingTime * 1000 * factor);
+    if (c.lambda) {
+      const deadline = w.invocationStart + c.lambda.timeout * 1000;
+      if (w.until > deadline) {
+        w.until = Math.max(this.now, deadline);
+        w.failReason = 'timeout';
+      }
+    }
   }
 
   private finishItem(c: ConsumerState, w: Worker, queue: SqsQueue | undefined) {
-    const cfg = c.node.config;
-    const item = w.batch[w.index];
+    const cfg = c.cfg;
     const id = c.node.id;
+    const l = c.lambda;
+
+    if (l && w.failReason) {
+      // banco recusou a conexão ou a função estourou o timeout: o lote inteiro volta para a fila
+      this.emit({ t: this.now, type: 'invocation_failed', node: id, reason: w.failReason, size: w.batch.length });
+      this.endBatch(w, queue, false);
+      return;
+    }
+
+    const item = w.batch[w.index];
+    let failed = false;
     if (item.token.poison) {
       this.emit({ t: this.now, type: 'process_failed', node: id, token: item.token, reason: 'poison' });
-      if (item.receipt === null) this.metrics.lose(item.token.logicalId);
+      failed = true;
     } else if (this.rng.chance(cfg.failRate)) {
       this.emit({ t: this.now, type: 'process_failed', node: id, token: item.token, reason: 'error' });
-      if (item.receipt === null) this.metrics.lose(item.token.logicalId);
+      failed = true;
     } else {
       item.ok = true;
       this.applySideEffect(c, item.token);
+    }
+    if (failed && item.receipt === null) this.pushFailed(item);
+
+    if (failed && l && !l.reportBatchItemFailures) {
+      // a exceção derruba a invocação: nada do lote é apagado, nem o que já teve efeito
+      this.emit({ t: this.now, type: 'invocation_failed', node: id, reason: 'error', size: w.batch.length });
+      this.endBatch(w, queue, false);
+      return;
     }
 
     w.index++;
@@ -522,8 +758,11 @@ export class Simulation {
       this.startProcessing(c, w);
       return;
     }
+    this.endBatch(w, queue, true);
+  }
 
-    const toDelete = w.batch.filter((b) => b.ok && b.receipt !== null);
+  private endBatch(w: Worker, queue: SqsQueue | undefined, deleteOk: boolean) {
+    const toDelete = deleteOk ? w.batch.filter((b) => b.ok && b.receipt !== null) : [];
     if (queue && toDelete.length) {
       this.call(toDelete.length > 1 ? 'DeleteMessageBatch' : 'DeleteMessage');
       for (const b of toDelete) {
@@ -533,11 +772,12 @@ export class Simulation {
     }
     w.batch = [];
     w.state = 'idle';
+    w.failReason = null;
     w.nextPollAt = this.now;
   }
 
   private applySideEffect(c: ConsumerState, token: Token) {
-    const cfg = c.node.config;
+    const cfg = c.cfg;
     const id = c.node.id;
     const { processed, maxSeq } = c.service;
     if (processed.has(token.logicalId)) {
@@ -564,7 +804,7 @@ export class Simulation {
     for (const p of this.producers.values()) {
       if (p.emitted < p.node.config.total || p.pending.length) return false;
     }
-    if (this.transits.length) return false;
+    if (this.transits.length || this.snsRetries.length) return false;
     for (const q of this.queues.values()) {
       if (q.messages.length === 0) continue;
       const hasConsumer = [...this.consumers.values()].some((c) => c.source?.id === q.id);
@@ -580,3 +820,4 @@ export class Simulation {
     return this.dlqIds.has(queueId);
   }
 }
+

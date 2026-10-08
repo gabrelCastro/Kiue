@@ -344,6 +344,11 @@ h3 .linklike {
 .kind-dot.kind-consumer {
   background: var(--consumer);
 }
+.kind-dot.kind-lambda {
+  background: #f59e0b;
+  clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%);
+  border-radius: 0;
+}
 .kind-dot.kind-producer {
   background: var(--producer);
 }
@@ -857,6 +862,9 @@ code.policy {
 }
 .badge.sns {
   background: #86198f;
+}
+.badge.lambda {
+  background: #b45309;
 }
 .badge.fifo {
   background: #a16207;

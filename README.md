@@ -11,7 +11,7 @@ npm run dev        # http://localhost:5173
 
 **Trilha Iniciante** (10 fases): fila SQS, buffer em picos, consumidores concorrentes, SNS fan-out, filter policy, DLQ, visibility timeout, at-least-once/idempotência, FIFO, long polling e custo.
 
-**Trilha Certificação** (6 fases, libera após a fase 5): SNS FIFO → SQS FIFO, retenção, delay queue, batch × visibility timeout, deduplicação FIFO e um exame final que junta tudo.
+**Trilha Certificação** (12 fases, libera após a fase 5): SNS FIFO → SQS FIFO, retenção, delay queue, batch × visibility timeout, deduplicação FIFO, SQS + Lambda (falha parcial de lote e MaximumConcurrency), heartbeat com ChangeMessageVisibility, retries do SNS e DLQ de assinatura, paralelismo por MessageGroupId, limite de tamanho com Extended Client e um exame final que junta tudo.
 
 **Sandbox**: tudo liberado, inclusive o produtor.
 
@@ -54,4 +54,4 @@ Fases são dados em `src/game/levels.ts`: grafo inicial, paleta, conceitos liber
 
 ## Simplificações conscientes
 
-Tempos e volumes são reduzidos para caber num jogo. O SNS entrega só para filas SQS (na AWS também entrega para Lambda, HTTP, e-mail etc.). A filter policy usa apenas o atributo `tipo`. Cotas de vazão do FIFO não são simuladas. As regras de entrega, visibilidade, redrive, ordem por grupo, deduplicação, retenção, delay e polling seguem a documentação da AWS (veja `docs/REQUISITOS.md`).
+Tempos e volumes são reduzidos para caber num jogo (por exemplo, os retries HTTP do SNS acontecem a cada 5 s, não 20 s). O SNS entrega para filas SQS e endpoints HTTPS (na AWS também invoca Lambda e envia e-mail/SMS). A Lambda escala de 1 em 1 por segundo até no máximo 20. A filter policy usa apenas o atributo `tipo`. Cotas de vazão do FIFO e criptografia aparecem só nas lições e no quiz. As regras de entrega, visibilidade, redrive, ordem por grupo, deduplicação, retenção, delay e polling seguem a documentação da AWS (veja `docs/REQUISITOS.md`).

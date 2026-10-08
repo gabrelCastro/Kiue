@@ -1,10 +1,11 @@
-import { defaultConsumer, defaultProducer, defaultQueue, defaultTopic } from '../sim/defaults';
+import { defaultConsumer, defaultLambda, defaultProducer, defaultQueue, defaultTopic } from '../sim/defaults';
 import type {
   ConfigByKind,
   ConsumerConfig,
   FilterPolicy,
   Graph,
   GraphNode,
+  LambdaConfig,
   NodeKind,
   ProducerConfig,
   QueueConfig,
@@ -72,6 +73,10 @@ export function C(id: string, name: string, x: number, z: number, c: Partial<Con
   return { id, kind: 'consumer', name, x, z, locked, config: defaultConsumer(c) };
 }
 
+export function L(id: string, name: string, x: number, z: number, c: Partial<LambdaConfig> = {}, locked = true): GraphNode {
+  return { id, kind: 'lambda', name, x, z, locked, config: defaultLambda(c) };
+}
+
 export function E(from: string, to: string, filterPolicy?: FilterPolicy, locked = false) {
   return { id: `e-${from}-${to}`, from, to, filterPolicy, locked };
 }
@@ -84,6 +89,12 @@ export function add(g: Graph, node: GraphNode): void {
 
 export function link(g: Graph, from: string, to: string, filterPolicy?: FilterPolicy): void {
   g.edges.push(E(from, to, filterPolicy));
+}
+
+export function setEdge(g: Graph, from: string, to: string, patch: Partial<Graph['edges'][number]>): void {
+  const e = g.edges.find((x) => x.from === from && x.to === to);
+  if (!e) throw new Error(`conexão ${from} → ${to} não existe`);
+  Object.assign(e, patch);
 }
 
 export function unlink(g: Graph, from: string, to: string): void {
