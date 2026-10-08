@@ -300,7 +300,7 @@ export class SceneView {
         div.className = 'edge-label';
         div.textContent = `filtro: ${describeFilterPolicy(e.filterPolicy)}`;
         const obj = new CSS2DObject(div);
-        obj.position.copy(curve.getPoint(0.5)).add(new Vector3(0, 0.35, 0));
+        obj.position.copy(curve.getPoint(0.62)).add(new Vector3(0, 0.35, 0));
         this.world.add(obj);
       }
     }
@@ -320,7 +320,7 @@ export class SceneView {
       div.className = 'edge-label dlq';
       div.textContent = `☠ após ${(n as GraphNode<'queue'>).config.maxReceiveCount} recebimentos`;
       const obj = new CSS2DObject(div);
-      obj.position.copy(curve.getPoint(0.5)).add(new Vector3(0.9, 0.1, 0));
+      obj.position.copy(curve.getPoint(0.5)).add(new Vector3(2.1, 0.1, 0));
       this.world.add(obj);
     }
     this.labelTimer = 0;
