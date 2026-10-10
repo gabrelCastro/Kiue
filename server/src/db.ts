@@ -38,6 +38,30 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX password_resets_user ON password_resets(user_id);
   `,
+  `
+  -- uma linha por fase concluída; a mesclagem guarda sempre o melhor resultado
+  CREATE TABLE progress (
+    user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    level_id     TEXT NOT NULL,
+    stars        INTEGER NOT NULL,
+    quiz_correct INTEGER,
+    updated_at   INTEGER NOT NULL,
+    PRIMARY KEY (user_id, level_id)
+  ) WITHOUT ROWID;
+
+  -- o grafo fica como JSON: o servidor guarda e devolve, quem interpreta é o jogo
+  CREATE TABLE sandboxes (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    graph       TEXT NOT NULL,
+    node_count  INTEGER NOT NULL,
+    revision    INTEGER NOT NULL,
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL
+  );
+  CREATE INDEX sandboxes_user ON sandboxes(user_id, updated_at DESC);
+  `,
 ];
 
 export type Database = DatabaseSync;

@@ -59,6 +59,45 @@ export interface ResetRepo {
   deleteExpired(now: number): number;
 }
 
+export interface ProgressRecord {
+  levelId: string;
+  stars: number;
+  quizCorrect: number | null;
+  updatedAt: number;
+}
+
+export interface ProgressRepo {
+  list(userId: string): ProgressRecord[];
+  /** Grava cada fase guardando o melhor entre o que já existe e o que chegou. */
+  mergeBest(userId: string, entries: ProgressRecord[]): void;
+  clear(userId: string): void;
+}
+
+export interface SandboxSummary {
+  id: string;
+  name: string;
+  nodeCount: number;
+  revision: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface SandboxRecord extends SandboxSummary {
+  userId: string;
+  /** Grafo serializado em JSON. */
+  graph: string;
+}
+
+export interface SandboxRepo {
+  list(userId: string): SandboxSummary[];
+  count(userId: string): number;
+  find(userId: string, id: string): SandboxRecord | null;
+  insert(s: SandboxRecord): void;
+  /** Atualiza só se a revisão ainda for `expectedRevision`; devolve se atualizou. */
+  update(userId: string, id: string, expectedRevision: number, patch: { name: string; graph: string; nodeCount: number; updatedAt: number }): boolean;
+  delete(userId: string, id: string): boolean;
+}
+
 export class EmailTakenError extends Error {}
 
 interface UserRow {
@@ -191,5 +230,94 @@ export class SqliteResetRepo implements ResetRepo {
 
   deleteExpired(now: number): number {
     return Number(this.db.prepare('DELETE FROM password_resets WHERE expires_at <= ? OR used_at IS NOT NULL').run(now).changes);
+  }
+}
+
+interface ProgressRow {
+  level_id: string;
+  stars: number;
+  quiz_correct: number | null;
+  updated_at: number;
+}
+
+export class SqliteProgressRepo implements ProgressRepo {
+  constructor(private db: Database) {}
+
+  list(userId: string): ProgressRecord[] {
+    const rows = this.db.prepare('SELECT level_id, stars, quiz_correct, updated_at FROM progress WHERE user_id = ? ORDER BY level_id').all(userId) as unknown as ProgressRow[];
+    return rows.map((r) => ({ levelId: r.level_id, stars: r.stars, quizCorrect: r.quiz_correct, updatedAt: r.updated_at }));
+  }
+
+  mergeBest(userId: string, entries: ProgressRecord[]): void {
+    // MAX(NULL, x) é NULL no SQLite: COALESCE mantém o quiz quando um dos lados não tem
+    const stmt = this.db.prepare(`
+      INSERT INTO progress (user_id, level_id, stars, quiz_correct, updated_at) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (user_id, level_id) DO UPDATE SET
+        stars = MAX(stars, excluded.stars),
+        quiz_correct = MAX(COALESCE(quiz_correct, excluded.quiz_correct), COALESCE(excluded.quiz_correct, quiz_correct)),
+        updated_at = excluded.updated_at
+      WHERE excluded.stars > stars OR COALESCE(excluded.quiz_correct, -1) > COALESCE(quiz_correct, -1)`);
+    for (const e of entries) stmt.run(userId, e.levelId, e.stars, e.quizCorrect, e.updatedAt);
+  }
+
+  clear(userId: string): void {
+    this.db.prepare('DELETE FROM progress WHERE user_id = ?').run(userId);
+  }
+}
+
+interface SandboxRow {
+  id: string;
+  user_id: string;
+  name: string;
+  graph: string;
+  node_count: number;
+  revision: number;
+  created_at: number;
+  updated_at: number;
+}
+
+const toSummary = (r: Omit<SandboxRow, 'graph' | 'user_id'>): SandboxSummary => ({
+  id: r.id,
+  name: r.name,
+  nodeCount: r.node_count,
+  revision: r.revision,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
+
+export class SqliteSandboxRepo implements SandboxRepo {
+  constructor(private db: Database) {}
+
+  list(userId: string): SandboxSummary[] {
+    const rows = this.db
+      .prepare('SELECT id, name, node_count, revision, created_at, updated_at FROM sandboxes WHERE user_id = ? ORDER BY updated_at DESC, id')
+      .all(userId) as unknown as SandboxRow[];
+    return rows.map(toSummary);
+  }
+
+  count(userId: string): number {
+    return (this.db.prepare('SELECT COUNT(*) AS n FROM sandboxes WHERE user_id = ?').get(userId) as { n: number }).n;
+  }
+
+  find(userId: string, id: string): SandboxRecord | null {
+    const r = this.db.prepare('SELECT * FROM sandboxes WHERE user_id = ? AND id = ?').get(userId, id) as SandboxRow | undefined;
+    return r ? { ...toSummary(r), userId: r.user_id, graph: r.graph } : null;
+  }
+
+  insert(s: SandboxRecord): void {
+    this.db
+      .prepare('INSERT INTO sandboxes (id, user_id, name, graph, node_count, revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(s.id, s.userId, s.name, s.graph, s.nodeCount, s.revision, s.createdAt, s.updatedAt);
+  }
+
+  update(userId: string, id: string, expectedRevision: number, p: { name: string; graph: string; nodeCount: number; updatedAt: number }): boolean {
+    const r = this.db
+      .prepare('UPDATE sandboxes SET name = ?, graph = ?, node_count = ?, updated_at = ?, revision = revision + 1 WHERE user_id = ? AND id = ? AND revision = ?')
+      .run(p.name, p.graph, p.nodeCount, p.updatedAt, userId, id, expectedRevision);
+    return Number(r.changes) === 1;
+  }
+
+  delete(userId: string, id: string): boolean {
+    return Number(this.db.prepare('DELETE FROM sandboxes WHERE user_id = ? AND id = ?').run(userId, id).changes) === 1;
   }
 }

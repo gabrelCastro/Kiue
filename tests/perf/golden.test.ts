@@ -1,5 +1,5 @@
 import { Simulation } from '../../src/sim/engine';
-import { LEVELS } from '../../src/game/levels';
+import { ALL_LEVELS as LEVELS } from '../../content/levels';
 import { solutionGraph } from '../../src/game/run';
 import { isRoutine, type SimEvent } from '../../src/sim/types';
 import { describeEvent } from '../../src/ui/format';

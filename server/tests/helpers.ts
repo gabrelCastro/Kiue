@@ -50,6 +50,9 @@ export class Browser {
 
   get = (path: string) => this.call('GET', path);
   post = (path: string, body?: unknown) => this.call('POST', path, body ?? {});
+  put = (path: string, body: unknown) => this.call('PUT', path, body);
+  patch = (path: string, body: unknown) => this.call('PATCH', path, body);
+  del = (path: string, body?: unknown) => this.call('DELETE', path, body);
 }
 
 export const ALICE = { name: 'Alice', email: 'alice@example.com', password: 'fila-de-mensagens' };

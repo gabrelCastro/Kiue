@@ -1,15 +1,16 @@
 import { defaultConsumer, defaultLambda, defaultProducer, defaultQueue, defaultTopic } from '../sim/defaults';
 import type { Simulation } from '../sim/engine';
 import type { ConfigByKind, FilterPolicy, Graph, GraphNode, NodeKind } from '../sim/types';
-import { requiresAccount, sandboxFor, type Access } from './access';
+import { GUEST_LEVELS, requiresAccount, sandboxFor, type Access } from './access';
 import type { Concept } from './catalog';
 import { footprintsOverlap } from './footprint';
 import { evaluateGoal, evaluateRun, type GoalResult, type RunResult } from './goals';
 import { addEdge, connectionError, findNode, newId, removeNode, validateGraph } from './graph';
 import type { Level, PaletteItem } from './level-types';
-import { LEVELS, levelById } from './levels';
+import { CATALOG, metaById, nextMeta, type LevelMeta } from './level-catalog';
+import { FREE_LEVELS, sandbox } from './levels';
 import { createSimulation, solutionGraph } from './run';
-import { loadProgress, saveProgress, type Progress } from './save';
+import { loadProgress, localProgress, type LevelProgress, type Progress, type ProgressSink } from './save';
 
 export type Mode = 'build' | 'run' | 'done';
 export type Tool = { type: 'select' } | { type: 'place'; item: PaletteItem } | { type: 'connect'; from: string };
@@ -23,6 +24,13 @@ export interface Toast {
 
 /** Por que uma fase não abre: falta conta, ou falta concluir a anterior. */
 export type LockReason = 'account' | 'progress';
+
+/** Sandbox salvo na conta que está aberto agora. */
+export interface SandboxRef {
+  id: string;
+  name: string;
+  revision: number;
+}
 
 export const SPEEDS = [0.5, 1, 2, 4, 8] as const;
 const GRID_LIMIT_X = 12;
@@ -58,10 +66,36 @@ export class Controller {
   showBriefing = false;
   showGlossary = false;
   progress: Progress = loadProgress();
+  progressSink: ProgressSink = localProgress;
+  /** Sandbox salvo aberto (null = sandbox novo, ainda não salvo). */
+  sandboxRef: SandboxRef | null = null;
+  /** `graphVersion` no último salvamento/abertura: diferente dele = alterações não salvas. */
+  private savedGraphVersion = 0;
   /** Começa como visitante; quem cuida da autenticação avisa com `setAccess`. */
   access: Access = 'guest';
   /** Chamado quando alguém tenta abrir uma fase que pede conta (a UI abre o cadastro). */
-  onAccountRequired: (level: Level) => void = () => {};
+  onAccountRequired: (level: LevelMeta) => void = () => {};
+  /** Busca o conteúdo de uma fase que não vem no bundle (a API, para quem tem conta). */
+  fetchLevel: (id: string) => Promise<Level> = () => Promise.reject(new Error('Esta fase não está disponível agora.'));
+  /** Fase sendo buscada no servidor (o menu mostra "carregando"). */
+  loadingLevel: string | null = null;
+  /** Fases já disponíveis: as do bundle e as que chegaram da API. */
+  private levels = new Map<string, Level>([...FREE_LEVELS, sandbox].map((l) => [l.id, l]));
+  /** Buscas em andamento: pré-carga e clique na mesma fase compartilham a requisição. */
+  private fetching = new Map<string, Promise<Level>>();
+  private loadSeq = 0;
+
+  constructor(opts: { levels?: Level[] } = {}) {
+    for (const l of opts.levels ?? []) this.registerLevel(l);
+  }
+
+  registerLevel(level: Level): void {
+    this.levels.set(level.id, level);
+  }
+
+  hasLevel(id: string): boolean {
+    return this.levels.has(id);
+  }
 
   private listeners = new Set<() => void>();
   private simListeners = new Set<(sim: Simulation | null) => void>();
@@ -112,29 +146,36 @@ export class Controller {
     this.notify();
   }
 
-  lockReason(level: Level): LockReason | null {
+  lockReason(level: LevelMeta): LockReason | null {
     if (requiresAccount(level, this.access)) return 'account';
     if (level.track === 'sandbox') return null;
-    const track = LEVELS.filter((l) => l.track === level.track);
-    const idx = track.indexOf(level);
+    const track = CATALOG.filter((l) => l.track === level.track);
+    const idx = track.findIndex((l) => l.id === level.id);
     const done = (id: string) => (this.progress[id]?.stars ?? 0) > 0;
     if (level.track === 'certificacao' && idx === 0) return done('i05') ? null : 'progress';
     return idx === 0 || done(track[idx - 1].id) ? null : 'progress';
   }
 
-  isUnlocked(level: Level): boolean {
+  isUnlocked(level: LevelMeta): boolean {
     return this.lockReason(level) === null;
   }
 
   setAccess(access: Access): void {
     if (access === this.access) return;
     this.access = access;
+    // sem conta, o conteúdo que veio da API sai da memória
+    if (access === 'guest') {
+      for (const id of this.levels.keys()) if (id !== 'sandbox' && !GUEST_LEVELS.has(id)) this.levels.delete(id);
+      this.fetching.clear();
+    }
     const level = this.level;
     if (this.screen === 'level' && level) {
       if (level.track === 'sandbox') {
         // troca só a paleta: o que já foi montado continua na mesa
         this.level = sandboxFor(access);
         this.tool = { type: 'select' };
+        // o sandbox salvo é da conta: sem ela, o que está na mesa vira um sandbox novo
+        if (access === 'guest') this.sandboxRef = null;
       } else if (requiresAccount(level, access)) {
         this.openMenu();
         this.flash('Você saiu da conta. Entre de novo para continuar esta fase.', 'info');
@@ -144,19 +185,86 @@ export class Controller {
     this.notify();
   }
 
+  /**
+   * Abre uma fase, buscando o conteúdo no servidor se ainda não estiver aqui. Resolve quando a
+   * fase está na tela (ou quando desistiu: pediu conta, deu erro, ou outra fase foi pedida depois).
+   */
+  async openLevel(id: string): Promise<void> {
+    const meta = metaById(id);
+    if (!meta) return;
+    if (requiresAccount(meta, this.access)) {
+      this.onAccountRequired(meta);
+      return;
+    }
+    if (!this.levels.has(id)) {
+      const seq = ++this.loadSeq;
+      this.loadingLevel = id;
+      this.notify();
+      try {
+        await this.load(id);
+      } catch (e) {
+        if (seq === this.loadSeq) this.flash(e instanceof Error ? e.message : 'Não foi possível carregar a fase.', 'error');
+        return;
+      } finally {
+        if (seq === this.loadSeq) this.loadingLevel = null;
+        this.notify();
+      }
+      if (seq !== this.loadSeq || requiresAccount(meta, this.access)) return;
+    }
+    this.startLevel(id);
+  }
+
+  /** Busca o conteúdo de uma fase (uma requisição por fase, mesmo com pedidos simultâneos). */
+  private load(id: string): Promise<Level> {
+    let pending = this.fetching.get(id);
+    if (!pending) {
+      const access = this.access;
+      pending = this.fetchLevel(id).then(
+        (level) => {
+          // se a conta saiu enquanto buscava, o conteúdo não fica
+          if (this.access === access) this.registerLevel(level);
+          this.fetching.delete(id);
+          return level;
+        },
+        (e) => {
+          this.fetching.delete(id);
+          throw e;
+        },
+      );
+      this.fetching.set(id, pending);
+    }
+    return pending;
+  }
+
+  /**
+   * Pré-carrega em segundo plano uma fase que o jogador provavelmente vai abrir, para o clique não
+   * esperar a rede. Silenciosa: erro aqui só significa que o clique vai buscar de novo.
+   */
+  prefetchLevel(id: string): void {
+    const meta = metaById(id);
+    if (!meta || this.levels.has(id) || requiresAccount(meta, this.access) || this.lockReason(meta)) return;
+    this.load(id).catch(() => {});
+  }
+
+  /** Abre uma fase já disponível; se ainda não estiver, busca (veja `openLevel`). */
   startLevel(id: string): void {
-    const found = levelById(id);
-    if (!found) return;
+    const found = this.levels.get(id);
+    if (!found) {
+      void this.openLevel(id);
+      return;
+    }
     if (requiresAccount(found, this.access)) {
       this.onAccountRequired(found);
       return;
     }
     const level = found.track === 'sandbox' ? sandboxFor(this.access) : found;
     this.level = level;
+    this.sandboxRef = null;
     this.screen = 'level';
     this.attempts = 0;
     this.usedSolution = false;
     this.resetGraph();
+    this.savedGraphVersion = this.graphVersion;
     this.showBriefing = level.track !== 'sandbox';
   }
 
@@ -445,6 +553,30 @@ export class Controller {
     if (this.sim.finished) this.complete();
   }
 
+  // ───────────── sandboxes salvos ─────────────
+
+  /** Abre um sandbox salvo na conta. */
+  openSavedSandbox(ref: SandboxRef, graph: Graph): void {
+    this.startLevel('sandbox');
+    if (this.level?.track !== 'sandbox') return;
+    this.graph = structuredClone(graph);
+    this.sandboxRef = ref;
+    this.graphChanged();
+    this.savedGraphVersion = this.graphVersion;
+  }
+
+  /** Avisado depois de salvar: o que está na tela passa a ser a versão salva. */
+  markSandboxSaved(ref: SandboxRef, graphVersion = this.graphVersion): void {
+    this.sandboxRef = ref;
+    this.savedGraphVersion = graphVersion;
+    this.notify();
+  }
+
+  /** Sandbox com mudanças desde o último salvamento (um sandbox novo intocado não conta). */
+  get sandboxDirty(): boolean {
+    return this.level?.track === 'sandbox' && this.graphVersion !== this.savedGraphVersion;
+  }
+
   private complete(): void {
     if (!this.sim || !this.level) return;
     this.mode = 'done';
@@ -459,8 +591,10 @@ export class Controller {
     if (this.result.passed) {
       const prev = this.progress[this.level.id];
       const stars = Math.max(prev?.stars ?? 0, this.result.stars);
-      this.progress = { ...this.progress, [this.level.id]: { ...prev, stars } };
-      saveProgress(this.progress);
+      this.updateProgress(this.level.id, { ...prev, stars });
+      // a próxima fase acabou de liberar: já busca, enquanto o jogador lê o resultado
+      const next = nextMeta(this.level.id);
+      if (next) this.prefetchLevel(next.id);
     }
     this.notify();
   }
@@ -468,8 +602,18 @@ export class Controller {
   recordQuiz(correct: number): void {
     if (!this.level) return;
     const prev = this.progress[this.level.id] ?? { stars: 0 };
-    this.progress = { ...this.progress, [this.level.id]: { ...prev, quizCorrect: Math.max(prev.quizCorrect ?? 0, correct) } };
-    saveProgress(this.progress);
+    this.updateProgress(this.level.id, { ...prev, quizCorrect: Math.max(prev.quizCorrect ?? 0, correct) });
+    this.notify();
+  }
+
+  private updateProgress(levelId: string, entry: LevelProgress): void {
+    this.progress = { ...this.progress, [levelId]: entry };
+    this.progressSink.save(this.progress, { [levelId]: entry });
+  }
+
+  /** Troca o progresso inteiro (ex.: o da conta chegou do servidor). */
+  setProgress(progress: Progress): void {
+    this.progress = progress;
     this.notify();
   }
 
@@ -488,7 +632,7 @@ export class Controller {
 
   resetProgress(): void {
     this.progress = {};
-    saveProgress(this.progress);
+    this.progressSink.clear();
     this.notify();
   }
 }

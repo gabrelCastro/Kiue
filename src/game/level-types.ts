@@ -15,6 +15,7 @@ import type {
 import type { Concept } from './catalog';
 import { findNode } from './graph';
 import type { Goal, StarTargets } from './goals';
+import { metaById, type LevelMeta } from './level-catalog';
 
 export type Track = 'iniciante' | 'certificacao' | 'sandbox';
 
@@ -33,12 +34,10 @@ export interface QuizQuestion {
   explanation: string;
 }
 
-export interface Level {
-  id: string;
-  track: Track;
-  index: number;
-  title: string;
-  concept: string;
+/**
+ * Fase pronta para jogar. Só dados (vira JSON): as fases fechadas chegam assim pela API.
+ */
+export interface Level extends LevelMeta {
   story: string;
   objective: string;
   hint: string;
@@ -47,13 +46,35 @@ export interface Level {
   concepts: Concept[];
   palette: PaletteItem[];
   graph: Graph;
-  /** Transforma o grafo inicial na solução de referência (testada automaticamente). */
-  solve: (g: Graph) => void;
+  /** Grafo da solução de referência (testada automaticamente). */
+  solution: Graph;
   sim: Partial<SimOptions>;
   goals: Goal[];
   stars: StarTargets;
   highlightGroups?: boolean;
 }
+
+/** Como uma fase é escrita: a solução é um passo a passo sobre o grafo inicial. */
+export type LevelSource = Omit<Level, keyof LevelMeta | 'solution'> & {
+  /** Transforma o grafo inicial na solução de referência. */
+  solve: (g: Graph) => void;
+};
+
+/** Junta a fase com os dados do catálogo e calcula a solução. */
+export function defineLevel(id: string, src: LevelSource): Level {
+  const meta = metaById(id);
+  if (!meta) throw new Error(`fase ${id} não está no catálogo`);
+  const { solve, ...rest } = src;
+  const solution = structuredClone(src.graph);
+  solve(solution);
+  return { ...meta, ...rest, solution };
+}
+
+export const LIVRO_ELETRO_ROUPA = [
+  { value: 'livro', weight: 1 },
+  { value: 'eletronico', weight: 1 },
+  { value: 'roupa', weight: 1 },
+];
 
 // ───────────── construtores de peças ─────────────
 

@@ -1,4 +1,5 @@
 import { test } from '@playwright/test';
+import { levelById } from '../content/levels';
 
 // Grafo pesado no sandbox: SNS → 6 filas com backlog, consumidores lentos e um endpoint HTTPS.
 const node = (id: string, kind: string, x: number, z: number, config: object) => ({ id, kind, name: id, x, z, config });
@@ -45,8 +46,11 @@ test('custo por frame do renderer sob carga', async ({ page }) => {
     ([g, level]) => {
       const ctrl = (window as any).__kiue.ctrl;
       if (level) {
-        // fase real com a solução de referência, no lugar do grafo de stress
-        ctrl.startLevel(level);
+        // fase real com a solução de referência, no lugar do grafo de stress (injetada direto:
+        // o benchmark roda só com o `vite preview`, sem a API que entrega as fases fechadas)
+        ctrl.access = 'member';
+        ctrl.registerLevel(level);
+        ctrl.startLevel(level.id);
         ctrl.setBriefing(false);
         ctrl.showSolution();
       } else {
@@ -58,7 +62,7 @@ test('custo por frame do renderer sob carga', async ({ page }) => {
         ctrl.setSpeed(8);
       }
     },
-    [heavyGraph(), LEVEL] as const,
+    [heavyGraph(), LEVEL ? (levelById(LEVEL) ?? null) : null] as const,
   );
   await page.waitForTimeout(3000); // deixa o backlog crescer
   await page.evaluate((spec) => {

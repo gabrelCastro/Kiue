@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { KIND_LABEL } from '../game/catalog';
-import { SPEEDS } from '../game/controller';
+import { SPEEDS, type Controller } from '../game/controller';
 import type { GoalResult } from '../game/goals';
 import { auth } from '../auth/store';
 import { AccountButton } from './auth/AccountButton';
@@ -10,16 +10,19 @@ import { describeEvent, fmtTime, type LogLine } from './format';
 import { useController, useTicker } from './hooks';
 import { Inspector } from './Inspector';
 import { ResultModal } from './Result';
+import { SandboxFile } from './SandboxFile';
 
 export function LevelScreen() {
   const ctrl = useController();
   const level = ctrl.level!;
   useKeyboard();
+  useUnsavedGuard();
 
   return (
     <div class="level-screen">
       <TopBar />
       <aside class="left">
+        {level.track === 'sandbox' && <SandboxFile />}
         {level.palette.length > 0 && <Palette />}
         {level.goals.length > 0 && <Goals />}
         <ObjectiveCard />
@@ -68,7 +71,7 @@ function TopBar() {
   const running = ctrl.mode === 'run';
   return (
     <header class="topbar">
-      <button class="btn ghost" onClick={() => ctrl.openMenu()} title="Voltar ao menu">
+      <button class="btn ghost" onClick={() => confirmLeave(ctrl) && ctrl.openMenu()} title="Voltar ao menu">
         ← Menu
       </button>
       <div class="title">
@@ -155,7 +158,7 @@ function Palette() {
           <button class="linklike" onClick={() => auth.open('register', { reason: 'Com uma conta, o sandbox libera até 20 filas, 10 tópicos, 20 consumidores e 10 funções Lambda.' })}>
             Crie uma conta
           </button>{' '}
-          para liberar todas as peças.
+          para liberar todas as peças e salvar seus sandboxes.
         </p>
       )}
     </div>
@@ -326,6 +329,28 @@ function EventLog() {
       )}
     </div>
   );
+}
+
+/** Sandbox de quem tem conta com alterações não salvas: pergunta antes de descartar. */
+function hasUnsaved(ctrl: Controller): boolean {
+  return ctrl.sandboxDirty && auth.status === 'signed-in';
+}
+
+function confirmLeave(ctrl: Controller): boolean {
+  return !hasUnsaved(ctrl) || confirm('Sair sem salvar as alterações deste sandbox?');
+}
+
+function useUnsavedGuard() {
+  const ctrl = useController();
+  const unsaved = hasUnsaved(ctrl);
+  // só registra enquanto há algo a perder: um `beforeunload` sempre ligado deixa a saída da página
+  // mais lenta e tira a página do cache de voltar/avançar do navegador
+  useEffect(() => {
+    if (!unsaved) return;
+    const onUnload = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, [unsaved]);
 }
 
 function useKeyboard() {

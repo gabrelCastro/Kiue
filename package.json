@@ -7,7 +7,7 @@
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite",
     "dev:api": "NODE_NO_WARNINGS=1 tsx watch server/src/index.ts",
-    "build": "tsc --noEmit && tsc --noEmit -p server && vite build",
+    "build": "tsc --noEmit && tsc --noEmit -p server && vite build && tsx scripts/check-bundle.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p server",
     "test": "vitest run",
     "test:watch": "vitest",

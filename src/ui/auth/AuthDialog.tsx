@@ -110,7 +110,7 @@ function RegisterForm() {
         return auth.register(name, email, password);
       })}
     >
-      {!auth.dialog?.reason && <p class="muted small auth-lead">Com a conta você libera as 22 fases das duas trilhas e o sandbox completo. É grátis.</p>}
+      {!auth.dialog?.reason && <p class="muted small auth-lead">Com a conta você libera as 22 fases e o sandbox completo, e seu progresso e seus sandboxes ficam salvos para jogar de qualquer computador. É grátis.</p>}
       <Field label="Nome" error={f.fieldError('name')}>
         <TextInput type="text" autoComplete="name" maxLength={60} value={name} onValue={setName} autoFocus required />
       </Field>

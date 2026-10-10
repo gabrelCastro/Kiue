@@ -1,13 +1,15 @@
-import type { Level } from '../game/level-types';
-import { LEVELS } from '../game/levels';
+import { useEffect } from 'preact/hooks';
+import { CATALOG, type LevelMeta } from '../game/level-catalog';
 import { auth } from '../auth/store';
 import { AccountButton } from './auth/AccountButton';
 import { useAuth } from './auth/AuthDialog';
 import { useController } from './hooks';
+import { SavedSandboxes } from './SavedSandboxes';
 import { Stars } from './Result';
 
 export function Menu() {
   const ctrl = useController();
+  usePrefetchNext();
   const totalStars = Object.values(ctrl.progress).reduce((s, p) => s + p.stars, 0);
   return (
     <div class="menu-shell">
@@ -22,7 +24,7 @@ export function Menu() {
         </span>
         <span class="spacer" />
         <span class="star-count" title="Estrelas conquistadas">
-          ★ {totalStars} / {LEVELS.length * 3}
+          ★ {totalStars} / {CATALOG.length * 3}
         </span>
         <button class="btn" onClick={() => ctrl.setGlossary(true)}>
           Glossário
@@ -38,18 +40,20 @@ export function Menu() {
           <p>Aprenda Amazon SQS e SNS montando arquiteturas e vendo as mensagens circularem.</p>
         </header>
         <GuestBanner />
-        <Track title="Trilha Iniciante" subtitle="Do zero: filas, fan-out, DLQ, ordem e custo." levels={LEVELS.filter((l) => l.track === 'iniciante')} />
+        <Track title="Trilha Iniciante" subtitle="Do zero: filas, fan-out, DLQ, ordem e custo." levels={CATALOG.filter((l) => l.track === 'iniciante')} />
         <Track
           title="Trilha Certificação"
           subtitle="Detalhes que caem na prova AWS Developer / Solutions Architect: Lambda, heartbeat, retries do SNS, cotas e limites. Libera após a fase 5 da trilha Iniciante."
-          levels={LEVELS.filter((l) => l.track === 'certificacao')}
+          levels={CATALOG.filter((l) => l.track === 'certificacao')}
         />
+        <SavedSandboxes />
         <footer class="menu-footer muted small">
           Simulação didática: tempos e limites são reduzidos para caber num jogo, mas as regras seguem o comportamento do SQS/SNS.{' '}
           <button
             class="linklike"
             onClick={() => {
-              if (confirm('Apagar todo o progresso salvo neste navegador?')) ctrl.resetProgress();
+              const where = auth.status === 'signed-in' ? 'da sua conta' : 'salvo neste navegador';
+              if (confirm(`Apagar todo o progresso ${where}? Os sandboxes salvos continuam.`)) ctrl.resetProgress();
             }}
           >
             Apagar progresso
@@ -58,6 +62,15 @@ export function Menu() {
       </div>
     </div>
   );
+}
+
+/** No menu, já busca a próxima fase a jogar (a primeira liberada e ainda sem estrela). */
+function usePrefetchNext() {
+  const ctrl = useController();
+  const next = ctrl.access === 'member' ? CATALOG.find((l) => !ctrl.progress[l.id]?.stars && ctrl.isUnlocked(l)) : undefined;
+  useEffect(() => {
+    if (next) ctrl.prefetchLevel(next.id);
+  }, [ctrl, next?.id]);
 }
 
 function GuestBanner() {
@@ -85,7 +98,7 @@ function GuestBanner() {
   );
 }
 
-function Track({ title, subtitle, levels }: { title: string; subtitle: string; levels: Level[] }) {
+function Track({ title, subtitle, levels }: { title: string; subtitle: string; levels: readonly LevelMeta[] }) {
   const ctrl = useController();
   const a = useAuth();
   return (
@@ -100,6 +113,8 @@ function Track({ title, subtitle, levels }: { title: string; subtitle: string; l
           const needsAccount = lock === 'account';
           return (
             <button
+              onPointerEnter={() => ctrl.prefetchLevel(l.id)}
+              onFocus={() => ctrl.prefetchLevel(l.id)}
               class={`level-card ${lock ? 'locked' : ''} ${needsAccount ? 'needs-account' : ''} ${p?.stars && !lock ? 'done' : ''}`}
               disabled={lock === 'progress' || (needsAccount && a.status !== 'guest')}
               onClick={() => ctrl.startLevel(l.id)}
@@ -108,7 +123,9 @@ function Track({ title, subtitle, levels }: { title: string; subtitle: string; l
               <span class="lc-title">{l.title}</span>
               <span class="lc-concept">{l.concept}</span>
               <span class="lc-stars">
-                {!lock ? (
+                {ctrl.loadingLevel === l.id ? (
+                  <span class="muted small">Carregando…</span>
+                ) : !lock ? (
                   <Stars n={p?.stars ?? 0} />
                 ) : needsAccount ? (
                   a.status === 'loading' ? null : <span class="lock-tag">Requer conta</span>

@@ -32,7 +32,9 @@ src/game    fases, objetivos, validação do grafo, controller, save, glossário
 src/render  cena three.js: peças, conexões, mensagens (InstancedMesh), efeitos
 src/ui      interface Preact
 src/auth    estado de login no navegador (AuthStore); src/api: cliente HTTP
-server/     API de contas (Hono + SQLite); testes em server/tests
+src/account sincronização do progresso e sandboxes salvos com a conta
+content/    conteúdo das fases fechadas para visitantes (só o servidor importa)
+server/     API (Hono + SQLite): contas, fases, progresso, sandboxes; testes em server/tests
 tests/      testes do simulador, do controller e de todas as fases
 e2e/        testes Playwright que jogam pela interface
 docs/REQUISITOS.md  requisitos e regras de fidelidade
@@ -62,7 +64,7 @@ No renderer: cena desenhada só quando algo muda (montando, pausado ou no result
 
 ### Adicionar uma fase
 
-Fases são dados em `src/game/levels.ts`: grafo inicial, paleta, conceitos liberados no inspetor, objetivos, metas de estrela, lições, quiz e uma função `solve` com a solução de referência. O teste `tests/game/levels.test.ts` garante automaticamente que o estado inicial falha e que a solução vence com 3 estrelas.
+Fases são dados: grafo inicial, paleta, conceitos liberados no inspetor, objetivos, metas de estrela, lições, quiz e uma função `solve` com a solução de referência (`defineLevel` a executa e guarda o grafo da solução, então a fase pronta é só JSON). Título e conceito de todas ficam no catálogo público `src/game/level-catalog.ts`; o conteúdo das fases 1, 2 e do sandbox fica em `src/game/levels.ts` (vai no bundle) e o das outras 20 em `content/levels.ts` (só o servidor carrega). O teste `tests/game/levels.test.ts` garante automaticamente que o estado inicial falha e que a solução vence com 3 estrelas.
 
 ## Scripts
 
@@ -79,12 +81,19 @@ Fases são dados em `src/game/levels.ts`: grafo inicial, paleta, conceitos liber
 
 ## Contas (back-end)
 
-Visitantes jogam as fases 1 e 2 da trilha Iniciante e um sandbox limitado (1 produtor, 1 tópico, 2 filas, 2 consumidores, 1 Lambda); o resto pede conta. A regra fica em `src/game/access.ts` e é aplicada no cliente (o conteúdo das fases está no bundle), então é uma porta de produto, não de segurança. Sem a API, o jogo segue no modo visitante e o botão **Entrar** avisa que as contas estão indisponíveis. Com a API, o jogador cria conta, entra, sai, troca o nome e a senha, desconecta outros aparelhos, redefine a senha por e-mail e exclui a conta.
+Visitantes jogam as fases 1 e 2 da trilha Iniciante e um sandbox limitado (1 produtor, 1 tópico, 2 filas, 2 consumidores, 1 Lambda); o resto pede conta. O bloqueio é real: o bundle do jogo traz só o catálogo (títulos) e as fases abertas; o conteúdo das demais chega por `GET /api/levels/:id`, que exige sessão. O `npm run build` falha se algum texto de `content/` aparecer no bundle (`scripts/check-bundle.ts`). Sem a API, o jogo segue no modo visitante e o botão **Entrar** avisa que as contas estão indisponíveis. Com a API, o jogador cria conta, entra, sai, troca o nome e a senha, desconecta outros aparelhos, redefine a senha por e-mail e exclui a conta. Com conta, o progresso e os sandboxes ficam salvos no servidor.
+
+**Progresso**: visitante guarda no navegador. Ao entrar, o progresso de visitante deste navegador é somado ao da conta e sai do navegador. Logado, cada fase concluída vai para o servidor; se a rede falhar, fica pendente (também no navegador) e é reenviada. A gravação é uma mesclagem que fica com o melhor resultado de cada fase, então reenviar ou jogar em dois aparelhos ao mesmo tempo não perde nada (`src/account/progress-sync.ts`).
+
+**Sandboxes salvos**: até 30 por conta, com nome. O painel **Arquivo** do sandbox salva (Ctrl+S), salva cópia e avisa de alterações não salvas; o menu lista, abre e exclui. Cada sandbox tem uma `revision`: se outra aba ou aparelho salvou depois que você abriu, o servidor recusa (409) e o jogo oferece sobrescrever ou salvar cópia. O servidor confere a forma do grafo (tipos de peça, ids, referências, tamanho) e guarda só os campos conhecidos; as regras do jogo continuam no cliente.
 
 ```
 server/src/app.ts            rotas (Hono) e middlewares: CSRF, sessão, limites, erros
 server/src/auth/service.ts   regras de negócio do login
 server/src/auth/password.ts  hash scrypt com parâmetros no próprio hash (permite subir o custo)
+server/src/game/levels.ts    entrega o conteúdo de content/levels.ts para quem está logado
+server/src/game/progress.ts  progresso por conta (mesclagem pelo melhor resultado)
+server/src/game/sandboxes.ts sandboxes salvos: validação do grafo, cota, revisão
 server/src/repos.ts          interfaces de dados + implementação SQLite
 server/src/db.ts             SQLite nativo do Node (node:sqlite) com migrações versionadas
 server/src/mail.ts           envio de e-mail (console em desenvolvimento)
@@ -99,6 +108,10 @@ server/src/mail.ts           envio de e-mail (console em desenvolvimento)
 | `POST /api/auth/logout-others` | encerra as sessões dos outros aparelhos |
 | `POST /api/auth/password-reset/request` · `confirm` | link de uso único por e-mail |
 | `DELETE /api/auth/account` | exclui a conta (pede a senha) |
+| `GET /api/levels/:id` | conteúdo de uma fase fechada para visitantes (exige sessão) |
+| `GET`/`PATCH`/`DELETE /api/progress` | progresso da conta / mesclar fases / zerar |
+| `GET`/`POST /api/sandboxes` | lista (sem o grafo) / cria |
+| `GET`/`PUT`/`DELETE /api/sandboxes/:id` | abre / salva por cima (com `revision`) / exclui |
 
 **Decisões de segurança**
 - **Sessão em cookie** `httpOnly` + `SameSite=Lax` (+ `Secure` e prefixo `__Host-` em produção), em vez de JWT no `localStorage`: o JavaScript da página nunca vê o token. O banco guarda só o SHA-256 do token. A sessão expira em 30 dias sem uso (renova com o uso) e em 180 dias no máximo.
@@ -106,11 +119,12 @@ server/src/mail.ts           envio de e-mail (console em desenvolvimento)
 - **Senhas**: scrypt (N=2¹⁵) com sal por senha, comparação em tempo constante, regras do NIST (mínimo de 8 caracteres, bloqueio das mais óbvias, sem regras de composição).
 - **Sem enumeração de contas**: login responde igual para e-mail inexistente e senha errada (e gasta o mesmo tempo); "esqueci a senha" sempre responde 202.
 - **Limites de tentativa**: 5 falhas de login por conta e 30 por IP a cada 15 min; limites também para cadastro e redefinição.
+- **Gravações de jogo** (progresso, sandboxes): 120 por conta a cada 10 min; corpo de até 16 KB (104 KB para sandboxes).
 - **Troca ou redefinição de senha** derruba as outras sessões; o link de redefinição vale 30 min, é de uso único e um pedido novo invalida o anterior.
 
 Variáveis de ambiente (todas opcionais): `PORT` (8787), `DATABASE_PATH` (`data/kiue.db`), `APP_URL` (URL pública do jogo, usada nos links e como origem permitida), `ALLOWED_ORIGINS`, `SECURE_COOKIES`, `TRUST_PROXY` (atrás de proxy/CDN), `SESSION_IDLE_DAYS`, `SESSION_MAX_DAYS`, `RESET_TOKEN_MINUTES`, `SCRYPT_COST`, `STATIC_DIR`.
 
-Em desenvolvimento, o e-mail de redefinição aparece no terminal da API. Para produção falta plugar um `Mailer` real (ex.: Amazon SES). O serviço não conhece o SQLite: para levar a API para Lambda + DynamoDB basta outra implementação de `UserRepo`/`SessionRepo`/`ResetRepo`, e o Hono roda na Lambda sem mudar as rotas. Os limites de tentativa ficam em memória: com várias instâncias, precisam de um armazenamento compartilhado.
+Em desenvolvimento, o e-mail de redefinição aparece no terminal da API. Para produção falta plugar um `Mailer` real (ex.: Amazon SES). O serviço não conhece o SQLite: para levar a API para Lambda + DynamoDB basta outra implementação de `UserRepo`/`SessionRepo`/`ResetRepo`/`ProgressRepo`/`SandboxRepo`, e o Hono roda na Lambda sem mudar as rotas. Os limites de tentativa ficam em memória: com várias instâncias, precisam de um armazenamento compartilhado.
 
 ## Simplificações conscientes
 

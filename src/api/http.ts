@@ -21,7 +21,7 @@ const OFFLINE = 'Não foi possível falar com o servidor. Verifique a conexão e
  * Chamada JSON à API no mesmo domínio (`/api`). O cookie de sessão é httpOnly: o navegador o envia
  * sozinho e o JavaScript nunca o vê. O `Origin` que o navegador manda é o que a API confere contra CSRF.
  */
-export async function api<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
+export async function api<T>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`/api${path}`, {

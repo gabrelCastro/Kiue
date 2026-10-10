@@ -23,9 +23,15 @@ test('visitante joga as fases 1 e 2; a 3 pede conta e libera depois do cadastro'
 test('visitante tem sandbox limitado', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.guest-banner')).toBeVisible();
-  await page.getByRole('button', { name: 'Sandbox' }).click();
+  await page.getByRole('button', { name: 'Sandbox', exact: true }).click();
   await expect(page.getByRole('button', { name: /Fila SQS/ })).toContainText('×2');
   await expect(page.locator('.sandbox-limit')).toContainText('Sandbox limitado');
   await page.locator('.sandbox-limit').getByRole('button', { name: 'Crie uma conta' }).click();
   await expect(page.getByRole('dialog')).toContainText('até 20 filas');
+});
+
+test('a API não entrega fases fechadas sem conta', async ({ page }) => {
+  await page.goto('/');
+  const status = await page.evaluate(async () => (await fetch('/api/levels/i03')).status);
+  expect(status).toBe(401);
 });

@@ -1,4 +1,4 @@
-import { AuthError } from './errors';
+import { HttpError } from '../errors';
 
 /*
  * Validação de entrada. Regras de senha seguem o NIST SP 800-63B: comprimento mínimo, sem regras
@@ -64,10 +64,10 @@ export function passwordInput(raw: unknown, field = 'password'): string {
 }
 
 export function tokenInput(raw: unknown): string {
-  if (typeof raw !== 'string' || !/^[A-Za-z0-9_-]{20,100}$/.test(raw)) throw new AuthError('invalid_token', 'Link inválido ou expirado. Peça um novo.', 400);
+  if (typeof raw !== 'string' || !/^[A-Za-z0-9_-]{20,100}$/.test(raw)) throw new HttpError('invalid_token', 'Link inválido ou expirado. Peça um novo.', 400);
   return raw;
 }
 
-function invalid(field: string, message: string): AuthError {
-  return new AuthError('validation', message, 400, field);
+function invalid(field: string, message: string): HttpError {
+  return new HttpError('validation', message, 400, field);
 }

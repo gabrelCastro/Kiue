@@ -618,7 +618,8 @@ h3 .linklike {
 }
 input[type='number'],
 select,
-.search {
+.search,
+.text-input {
   background: var(--panel);
   border: 1px solid var(--input-border);
   color: var(--text);
@@ -628,7 +629,8 @@ select,
 }
 input[type='number']:focus,
 select:focus,
-.search:focus {
+.search:focus,
+.text-input:focus {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
@@ -1273,6 +1275,114 @@ details p {
 .search {
   width: 100%;
   padding: 5px 10px;
+}
+
+/* ───────── sandboxes salvos ───────── */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.sandbox-file-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sandbox-file-form .text-input {
+  width: 100%;
+  padding: 5px 10px;
+}
+.sandbox-status {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+.sandbox-status.dirty {
+  color: var(--text);
+  font-weight: 700;
+}
+.sandbox-status.dirty::before {
+  content: '● ';
+}
+.sandbox-file .alert {
+  margin-top: 8px;
+}
+.sandbox-conflict {
+  margin-top: 6px;
+}
+.saved-sandboxes > .row {
+  align-items: baseline;
+}
+.sandbox-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 84px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--panel);
+  transition: border-color 0.12s, background 0.12s;
+}
+.sandbox-card:hover {
+  border-color: var(--accent);
+}
+.sandbox-card.new {
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-style: dashed;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+}
+.sandbox-card.new:hover {
+  background: var(--accent-soft);
+}
+.sc-plus {
+  font-size: 22px;
+  line-height: 1;
+}
+.sc-open {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px 28px;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  border-radius: inherit;
+}
+.sc-open:disabled {
+  cursor: progress;
+}
+.sc-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.sc-meta {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.sc-delete {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  color: var(--muted);
+}
+.sc-delete:hover:not(:disabled) {
+  color: var(--bad);
+  background: var(--bad-soft);
+}
+.sandbox-card .sc-open:focus-visible,
+.sandbox-card.new:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ───────── conta e login ───────── */

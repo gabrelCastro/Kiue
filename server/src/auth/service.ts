@@ -1,7 +1,7 @@
 import type { Config } from '../config';
 import type { Mailer } from '../mail';
 import { EmailTakenError, type ResetRepo, type SessionRepo, type UserRecord, type UserRepo } from '../repos';
-import { AuthError } from './errors';
+import { HttpError } from '../errors';
 import { hashPassword, needsRehash, verifyPassword } from './password';
 import type { RateLimiter } from './rate-limit';
 import { hashToken, newId, newToken } from './tokens';
@@ -80,7 +80,7 @@ export class AuthService {
     try {
       this.deps.users.insert(user);
     } catch (e) {
-      if (e instanceof EmailTakenError) throw new AuthError('email_taken', 'Já existe uma conta com este e-mail. Entre ou redefina a senha.', 409, 'email');
+      if (e instanceof EmailTakenError) throw new HttpError('email_taken', 'Já existe uma conta com este e-mail. Entre ou redefina a senha.', 409, 'email');
       throw e;
     }
     return this.issueSession(user, ctx.userAgent);
@@ -99,7 +99,7 @@ export class AuthService {
       loginByEmail.hit(email);
       loginByIp.hit(ctx.ip);
       // mesma mensagem para e-mail inexistente e senha errada: não revela quem tem conta
-      throw new AuthError('invalid_credentials', 'E-mail ou senha incorretos.', 401);
+      throw new HttpError('invalid_credentials', 'E-mail ou senha incorretos.', 401);
     }
     loginByEmail.reset(email);
     if (needsRehash(user.passwordHash, this.deps.config.scryptCost)) {
@@ -158,7 +158,7 @@ export class AuthService {
     this.guard(this.deps.limiters.loginByEmail, user.email, 'Muitas tentativas. Espere um pouco.');
     if (!(await verifyPassword(current, user.passwordHash))) {
       this.deps.limiters.loginByEmail.hit(user.email);
-      throw new AuthError('invalid_credentials', 'Senha atual incorreta.', 401, 'currentPassword');
+      throw new HttpError('invalid_credentials', 'Senha atual incorreta.', 401, 'currentPassword');
     }
     this.deps.users.updatePassword(userId, await hashPassword(next, this.deps.config.scryptCost), this.now());
     this.deps.sessions.deleteByUser(userId, sessionId);
@@ -168,7 +168,7 @@ export class AuthService {
   async deleteAccount(userId: string, input: { password?: unknown }): Promise<void> {
     const password = passwordInput(input.password);
     const user = this.deps.users.findById(userId)!;
-    if (!(await verifyPassword(password, user.passwordHash))) throw new AuthError('invalid_credentials', 'Senha incorreta.', 401, 'password');
+    if (!(await verifyPassword(password, user.passwordHash))) throw new HttpError('invalid_credentials', 'Senha incorreta.', 401, 'password');
     this.deps.users.delete(userId); // sessões e links caem junto (ON DELETE CASCADE)
   }
 
@@ -215,9 +215,9 @@ export class AuthService {
     const token = tokenInput(input.token);
     const reset = this.deps.resets.find(hashToken(token));
     const now = this.now();
-    if (!reset || reset.usedAt !== null || reset.expiresAt <= now) throw new AuthError('invalid_token', 'Link inválido ou expirado. Peça um novo.', 400);
+    if (!reset || reset.usedAt !== null || reset.expiresAt <= now) throw new HttpError('invalid_token', 'Link inválido ou expirado. Peça um novo.', 400);
     const user = this.deps.users.findById(reset.userId);
-    if (!user) throw new AuthError('invalid_token', 'Link inválido ou expirado. Peça um novo.', 400);
+    if (!user) throw new HttpError('invalid_token', 'Link inválido ou expirado. Peça um novo.', 400);
     const next = validateNewPassword(input.newPassword, 'newPassword', user.email);
     this.deps.users.updatePassword(user.id, await hashPassword(next, this.deps.config.scryptCost), now);
     this.deps.resets.markUsed(reset.id, now);
@@ -242,6 +242,6 @@ export class AuthService {
 
   private guard(limiter: RateLimiter, key: string, message: string): void {
     const wait = limiter.retryAfter(key);
-    if (wait > 0) throw new AuthError('rate_limited', message, 429, undefined, wait);
+    if (wait > 0) throw new HttpError('rate_limited', message, 429, undefined, wait);
   }
 }

@@ -1,9 +1,9 @@
 import { Controller } from '../../src/game/controller';
-import { levelById } from '../../src/game/levels';
+import { ALL_LEVELS, levelById } from '../../content/levels';
 import type { GraphNode } from '../../src/sim/types';
 
 function open(id: string) {
-  const c = new Controller();
+  const c = new Controller({ levels: ALL_LEVELS });
   c.progress = {};
   c.access = 'member';
   c.startLevel(id);
@@ -106,7 +106,7 @@ describe('Controller', () => {
   });
 
   it('desbloqueio das trilhas', () => {
-    const c = new Controller();
+    const c = new Controller({ levels: ALL_LEVELS });
     c.progress = {};
     c.access = 'member';
     expect(c.isUnlocked(levelById('i01')!)).toBe(true);
@@ -128,7 +128,7 @@ describe('Controller', () => {
 
   describe('acesso de visitante', () => {
     function guest() {
-      const c = new Controller();
+      const c = new Controller({ levels: ALL_LEVELS });
       c.progress = { i01: { stars: 3 }, i02: { stars: 3 }, i05: { stars: 3 } };
       const asked: string[] = [];
       c.onAccountRequired = (l) => asked.push(l.id);
@@ -180,6 +180,153 @@ describe('Controller', () => {
       c.startLevel('i02');
       c.setAccess('guest');
       expect(c.screen).toBe('level');
+    });
+  });
+
+  describe('sandbox salvo e progresso', () => {
+    it('marca alterações não salvas e limpa ao salvar', () => {
+      const c = open('sandbox');
+      expect(c.sandboxDirty).toBe(false);
+      c.setTool({ type: 'place', item: c.level!.palette.find((p) => p.kind === 'queue')! });
+      c.placeAt(0, 4);
+      expect(c.sandboxDirty).toBe(true);
+      c.markSandboxSaved({ id: 's1', name: 'Meu', revision: 1 });
+      expect(c.sandboxDirty).toBe(false);
+      expect(c.sandboxRef?.name).toBe('Meu');
+      c.updateConfig<'queue'>(c.graph.nodes.find((n) => n.kind === 'queue')!.id, { visibilityTimeout: 5 });
+      expect(c.sandboxDirty).toBe(true);
+    });
+
+    it('abre um sandbox salvo sem marcar como alterado, e um sandbox novo esquece o salvo', () => {
+      const c = open('i01');
+      const graph = { nodes: [{ ...c.level!.graph.nodes[0], x: 2 }], edges: [] };
+      c.openSavedSandbox({ id: 's1', name: 'Salvo', revision: 4 }, graph);
+      expect(c.level!.id).toBe('sandbox');
+      expect(c.graph.nodes[0].x).toBe(2);
+      expect(c.sandboxDirty).toBe(false);
+      c.startLevel('sandbox');
+      expect(c.sandboxRef).toBeNull();
+    });
+
+    it('perder a conta dentro de um sandbox salvo o transforma em sandbox novo', () => {
+      const c = open('i01');
+      c.openSavedSandbox({ id: 's1', name: 'Salvo', revision: 1 }, { nodes: [], edges: [] });
+      c.setAccess('guest');
+      expect(c.screen).toBe('level');
+      expect(c.sandboxRef).toBeNull();
+    });
+
+    it('manda só a fase que mudou para quem guarda o progresso', () => {
+      const c = open('i01');
+      const saved: unknown[] = [];
+      c.progressSink = { save: (_all, changed) => saved.push(changed), clear: () => saved.push('clear') };
+      c.showSolution();
+      c.run();
+      c.finishNow();
+      c.recordQuiz(2);
+      c.resetProgress();
+      expect(saved).toEqual([{ i01: { stars: 3 } }, { i01: { stars: 3, quizCorrect: 2 } }, 'clear']);
+    });
+  });
+
+  describe('fases vindas do servidor', () => {
+    const i03 = levelById('i03')!;
+
+    it('busca a fase que não está no bundle e abre quando chega', async () => {
+      const c = new Controller();
+      c.access = 'member';
+      c.progress = { i02: { stars: 1 } };
+      const asked: string[] = [];
+      c.fetchLevel = async (id) => (asked.push(id), structuredClone(i03));
+      const opening = c.openLevel('i03');
+      expect(c.loadingLevel).toBe('i03');
+      await opening;
+      expect(asked).toEqual(['i03']);
+      expect(c.loadingLevel).toBeNull();
+      expect(c.level?.id).toBe('i03');
+      // segunda vez já está em memória
+      c.openMenu();
+      await c.openLevel('i03');
+      expect(asked).toEqual(['i03']);
+    });
+
+    it('visitante não chega a pedir o conteúdo', async () => {
+      const c = new Controller();
+      const fetched: string[] = [];
+      const asked: string[] = [];
+      c.fetchLevel = async (id) => (fetched.push(id), i03);
+      c.onAccountRequired = (m) => asked.push(m.id);
+      await c.openLevel('i03');
+      expect(fetched).toEqual([]);
+      expect(asked).toEqual(['i03']);
+    });
+
+    it('erro de rede vira aviso e o jogador fica no menu', async () => {
+      const c = new Controller();
+      c.access = 'member';
+      c.fetchLevel = async () => {
+        throw new Error('Não foi possível falar com o servidor.');
+      };
+      await c.openLevel('i03');
+      expect(c.screen).toBe('menu');
+      expect(c.toast?.text).toContain('servidor');
+      expect(c.loadingLevel).toBeNull();
+    });
+
+    it('só a última fase pedida abre, e sair da conta esquece o conteúdo baixado', async () => {
+      const c = new Controller();
+      c.access = 'member';
+      const pending: Record<string, (l: ReturnType<typeof levelById>) => void> = {};
+      c.fetchLevel = (id) => new Promise((resolve) => (pending[id] = resolve as never));
+      const first = c.openLevel('i03');
+      const second = c.openLevel('i04');
+      pending.i04(levelById('i04'));
+      await second;
+      pending.i03(i03);
+      await first;
+      expect(c.level?.id).toBe('i04');
+      expect(c.hasLevel('i03')).toBe(true);
+      c.setAccess('guest');
+      expect(c.hasLevel('i03')).toBe(false);
+      expect(c.hasLevel('i01')).toBe(true);
+    });
+
+    it('pré-carga e clique na mesma fase fazem uma requisição só', async () => {
+      const c = new Controller();
+      c.access = 'member';
+      c.progress = { i01: { stars: 1 }, i02: { stars: 1 } };
+      let calls = 0;
+      let release!: () => void;
+      c.fetchLevel = () => (calls++, new Promise((resolve) => (release = () => resolve(structuredClone(i03)))));
+      c.prefetchLevel('i03');
+      const opening = c.openLevel('i03');
+      release();
+      await opening;
+      expect(calls).toBe(1);
+      expect(c.level?.id).toBe('i03');
+    });
+
+    it('não pré-carrega o que o jogador ainda não pode abrir', () => {
+      const c = new Controller();
+      const asked: string[] = [];
+      c.fetchLevel = async (id) => (asked.push(id), i03);
+      c.prefetchLevel('i03'); // visitante
+      c.access = 'member';
+      c.prefetchLevel('i04'); // falta concluir a 3
+      expect(asked).toEqual([]);
+    });
+
+    it('vencer uma fase já busca a próxima', async () => {
+      const c = new Controller({ levels: [levelById('i03')!] });
+      c.access = 'member';
+      c.progress = { i02: { stars: 1 } };
+      const asked: string[] = [];
+      c.fetchLevel = async (id) => (asked.push(id), levelById(id)!);
+      c.startLevel('i03');
+      c.showSolution();
+      c.run();
+      c.finishNow();
+      expect(asked).toEqual(['i04']);
     });
   });
 });

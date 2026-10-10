@@ -1,6 +1,6 @@
 import { footprintsOverlap } from '../../src/game/footprint';
 import { connectionError, validateGraph } from '../../src/game/graph';
-import { LEVELS } from '../../src/game/levels';
+import { ALL_LEVELS as LEVELS } from '../../content/levels';
 import { runLevel, solutionGraph } from '../../src/game/run';
 
 describe.each(LEVELS.map((l) => [l.id, l] as const))('fase %s', (_id, level) => {

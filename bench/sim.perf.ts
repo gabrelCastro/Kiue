@@ -1,4 +1,4 @@
-import { LEVELS } from '../src/game/levels';
+import { ALL_LEVELS as LEVELS } from '../content/levels';
 import { runLevel, solutionGraph } from '../src/game/run';
 import { runScenario, STRESS } from '../tests/perf/scenarios';
 

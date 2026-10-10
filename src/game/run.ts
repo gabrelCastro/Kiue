@@ -8,9 +8,7 @@ export function createSimulation(level: Level, graph: Graph): Simulation {
 }
 
 export function solutionGraph(level: Level): Graph {
-  const g: Graph = structuredClone(level.graph);
-  level.solve(g);
-  return g;
+  return structuredClone(level.solution);
 }
 
 /** Roda a fase até o fim, sem render, e avalia. */

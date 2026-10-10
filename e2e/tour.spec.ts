@@ -8,7 +8,7 @@ test.use({ storageState: MEMBER_STATE });
 const LEVEL_IDS = ['i01', 'i02', 'i03', 'i04', 'i05', 'i06', 'i07', 'i08', 'i09', 'i10', 'c01', 'c02', 'c03', 'c04', 'c05', 'c06', 'c07', 'c08', 'c09', 'c10', 'c11', 'c12'];
 const SHOTS = process.env.SHOTS_DIR;
 
-type Hook = { ctrl: { startLevel(id: string): void; setBriefing(v: boolean): void; showSolution(): void; run(): void; setSpeed(n: number): void; finishNow(): void; select(s: unknown): void } };
+type Hook = { ctrl: { openLevel(id: string): Promise<void>; setBriefing(v: boolean): void; showSolution(): void; run(): void; setSpeed(n: number): void; finishNow(): void; select(s: unknown): void } };
 
 for (const id of LEVEL_IDS) {
   test(`solução da fase ${id} roda na interface`, async ({ page }) => {
@@ -17,11 +17,11 @@ for (const id of LEVEL_IDS) {
     page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
     await page.goto('/');
     await expect(page.locator('.console-nav .account-btn')).toBeVisible(); // sessão confirmada antes de abrir fases fechadas
-    await page.getByRole('button', { name: 'Sandbox' }).click();
+    await page.getByRole('button', { name: 'Sandbox', exact: true }).click();
     await page.waitForFunction(() => '__kiue' in window);
-    await page.evaluate((id) => {
+    await page.evaluate(async (id) => {
       const { ctrl } = (window as unknown as { __kiue: Hook }).__kiue;
-      ctrl.startLevel(id);
+      await ctrl.openLevel(id);
       ctrl.setBriefing(false);
       ctrl.showSolution();
       ctrl.select(null);

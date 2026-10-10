@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks';
 import { auth } from '../auth/store';
-import { nextLevel } from '../game/levels';
+import { nextMeta } from '../game/level-catalog';
 import type { QuizQuestion } from '../game/level-types';
 import { useController } from './hooks';
 
@@ -19,7 +19,7 @@ export function ResultModal() {
   const level = ctrl.level!;
   const result = ctrl.result!;
   const [step, setStep] = useState<'result' | 'quiz'>('result');
-  const next = nextLevel(level.id);
+  const next = nextMeta(level.id);
   const nextLock = next ? ctrl.lockReason(next) : 'progress';
   // visitante terminando a última fase aberta: o próximo passo é criar a conta
   const nextId = next && (nextLock === null || nextLock === 'account') ? next.id : null;
@@ -90,7 +90,7 @@ export function ResultModal() {
 
 function NextButton({ nextId }: { nextId: string | null }) {
   const ctrl = useController();
-  const next = nextId ? nextLevel(ctrl.level!.id) : undefined;
+  const next = nextId ? nextMeta(ctrl.level!.id) : undefined;
   if (next && ctrl.lockReason(next) === 'account') {
     return (
       <button class="btn primary" onClick={() => auth.open('register', { reason: 'Você concluiu as fases abertas para visitantes. Crie uma conta grátis para seguir para a fase 3 e liberar o resto do jogo.' })}>

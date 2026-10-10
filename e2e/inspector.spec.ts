@@ -5,7 +5,7 @@ import { MEMBER_STATE } from './global-setup';
 test.use({ storageState: MEMBER_STATE });
 
 type Hook = {
-  ctrl: { startLevel(id: string): void; setBriefing(v: boolean): void; progress: Record<string, unknown> };
+  ctrl: { openLevel(id: string): Promise<void>; setBriefing(v: boolean): void; progress: Record<string, unknown> };
   project: (x: number, z: number, y: number) => { x: number; y: number };
 };
 
@@ -16,11 +16,11 @@ async function openLevel(page: Page, id: string) {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
   await expect(page.locator('.console-nav .account-btn')).toBeVisible(); // sessão confirmada antes de abrir fases fechadas
-  await page.getByRole('button', { name: 'Sandbox' }).click();
+  await page.getByRole('button', { name: 'Sandbox', exact: true }).click();
   await page.waitForFunction(() => '__kiue' in window);
-  await page.evaluate((id) => {
+  await page.evaluate(async (id) => {
     const { ctrl } = (window as unknown as { __kiue: Hook }).__kiue;
-    ctrl.startLevel(id);
+    await ctrl.openLevel(id);
     ctrl.setBriefing(false);
   }, id);
   await page.waitForTimeout(200);

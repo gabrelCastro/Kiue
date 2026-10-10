@@ -1,14 +1,15 @@
+import type { LevelMeta } from './level-catalog';
 import type { Level } from './level-types';
-import { sandbox } from './levels';
+import { FREE_LEVELS, sandbox } from './levels';
 
 /** Quem está jogando: visitante (sem conta) ou membro (logado). */
 export type Access = 'guest' | 'member';
 
-/** Fases abertas para visitantes: o começo da trilha Iniciante. */
-export const GUEST_LEVELS: ReadonlySet<string> = new Set(['i01', 'i02']);
+/** Fases abertas para visitantes: as que vêm no bundle (o começo da trilha Iniciante). */
+export const GUEST_LEVELS: ReadonlySet<string> = new Set(FREE_LEVELS.map((l) => l.id));
 
 /** Fase que só abre com conta para este tipo de acesso. */
-export function requiresAccount(level: Level, access: Access): boolean {
+export function requiresAccount(level: Pick<LevelMeta, 'id' | 'track'>, access: Access): boolean {
   return access === 'guest' && level.track !== 'sandbox' && !GUEST_LEVELS.has(level.id);
 }
 
