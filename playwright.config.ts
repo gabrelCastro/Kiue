@@ -4,6 +4,10 @@ export default defineConfig({
   testDir: 'e2e',
   globalSetup: './e2e/global-setup.ts',
   timeout: 60_000,
+  // no CI: falha se sobrar um test.only, tenta de novo uma vez (e marca o teste como instável)
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 1 : 0,
+  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: { baseURL: 'http://localhost:4317', viewport: { width: 1440, height: 900 } },
   webServer: [
     {
