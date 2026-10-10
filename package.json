@@ -1,28 +1,35 @@
 {
-  "name": "sqslearn",
+  "name": "kiue",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite",
+    "dev:api": "NODE_NO_WARNINGS=1 tsx watch server/src/index.ts",
+    "build": "tsc --noEmit && tsc --noEmit -p server && vite build",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p server",
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview",
     "e2e": "npm run build && playwright test",
     "check": "npm run typecheck && npm run test && npm run build && playwright test",
     "bench": "vitest run --config bench/vitest.config.ts",
-    "bench:render": "npm run build && playwright test -c bench/playwright.config.ts --reporter=list"
+    "bench:render": "npm run build && playwright test -c bench/playwright.config.ts --reporter=list",
+    "start": "npm run build && APP_URL=${APP_URL:-http://localhost:8787} NODE_ENV=production NODE_NO_WARNINGS=1 STATIC_DIR=dist tsx server/src/index.ts"
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.4",
+    "hono": "^4.13.13",
     "preact": "^11.0.0",
     "three": "^0.186.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^22.20.5",
     "@types/three": "^0.186.0",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.3",
     "vitest": "^5.0.3"

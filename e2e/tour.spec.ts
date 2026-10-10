@@ -1,4 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { MEMBER_STATE } from './global-setup';
+
+// fases fechadas para visitantes: roda logado
+test.use({ storageState: MEMBER_STATE });
 
 // Roda a solução de cada fase pela interface e verifica que a cena renderiza sem erros.
 const LEVEL_IDS = ['i01', 'i02', 'i03', 'i04', 'i05', 'i06', 'i07', 'i08', 'i09', 'i10', 'c01', 'c02', 'c03', 'c04', 'c05', 'c06', 'c07', 'c08', 'c09', 'c10', 'c11', 'c12'];
@@ -12,10 +16,11 @@ for (const id of LEVEL_IDS) {
     page.on('pageerror', (e) => errors.push(e.message));
     page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
     await page.goto('/');
+    await expect(page.locator('.console-nav .account-btn')).toBeVisible(); // sessão confirmada antes de abrir fases fechadas
     await page.getByRole('button', { name: 'Sandbox' }).click();
-    await page.waitForFunction(() => '__sqslearn' in window);
+    await page.waitForFunction(() => '__kiue' in window);
     await page.evaluate((id) => {
-      const { ctrl } = (window as unknown as { __sqslearn: Hook }).__sqslearn;
+      const { ctrl } = (window as unknown as { __kiue: Hook }).__kiue;
       ctrl.startLevel(id);
       ctrl.setBriefing(false);
       ctrl.showSolution();

@@ -1,4 +1,5 @@
 import { useState } from 'preact/hooks';
+import { auth } from '../auth/store';
 import { nextLevel } from '../game/levels';
 import type { QuizQuestion } from '../game/level-types';
 import { useController } from './hooks';
@@ -19,7 +20,9 @@ export function ResultModal() {
   const result = ctrl.result!;
   const [step, setStep] = useState<'result' | 'quiz'>('result');
   const next = nextLevel(level.id);
-  const nextUnlocked = next && ctrl.isUnlocked(next);
+  const nextLock = next ? ctrl.lockReason(next) : 'progress';
+  // visitante terminando a última fase aberta: o próximo passo é criar a conta
+  const nextId = next && (nextLock === null || nextLock === 'account') ? next.id : null;
 
   return (
     <div class="modal-backdrop">
@@ -74,11 +77,11 @@ export function ResultModal() {
                   Quiz rápido →
                 </button>
               )}
-              {result.passed && level.quiz.length === 0 && <NextButton nextId={nextUnlocked ? next!.id : null} />}
+              {result.passed && level.quiz.length === 0 && <NextButton nextId={nextId} />}
             </div>
           </>
         ) : (
-          <Quiz questions={level.quiz} onDone={(correct) => ctrl.recordQuiz(correct)} nextId={nextUnlocked ? next!.id : null} />
+          <Quiz questions={level.quiz} onDone={(correct) => ctrl.recordQuiz(correct)} nextId={nextId} />
         )}
       </div>
     </div>
@@ -87,6 +90,14 @@ export function ResultModal() {
 
 function NextButton({ nextId }: { nextId: string | null }) {
   const ctrl = useController();
+  const next = nextId ? nextLevel(ctrl.level!.id) : undefined;
+  if (next && ctrl.lockReason(next) === 'account') {
+    return (
+      <button class="btn primary" onClick={() => auth.open('register', { reason: 'Você concluiu as fases abertas para visitantes. Crie uma conta grátis para seguir para a fase 3 e liberar o resto do jogo.' })}>
+        Criar conta e continuar →
+      </button>
+    );
+  }
   return nextId ? (
     <button class="btn primary" onClick={() => ctrl.startLevel(nextId)}>
       Próxima fase →

@@ -33,25 +33,37 @@ function heavyGraph() {
 }
 
 const VARIANT = process.env.VARIANT ?? '';
+/** `LEVEL=c12` mede uma fase real (solução de referência) em vez do grafo de stress. */
+const LEVEL = process.env.LEVEL ?? '';
 
 test('custo por frame do renderer sob carga', async ({ page }) => {
   if (VARIANT.includes('idle')) await page.addInitScript(() => ((window as any).IDLE = true));
   await page.goto('/');
   await page.getByRole('button', { name: 'Sandbox', exact: true }).click();
-  await page.evaluate(() => (window as any).__sqslearn.ctrl.setBriefing(false));
-  await page.evaluate((g) => {
-    const ctrl = (window as any).__sqslearn.ctrl;
-    ctrl.graph = g;
-    ctrl.graphVersion++;
-    if (!(window as any).IDLE) {
-      ctrl.run();
-      ctrl.setSpeed(8);
-    }
-  }, heavyGraph());
+  await page.evaluate(() => (window as any).__kiue.ctrl.setBriefing(false));
+  await page.evaluate(
+    ([g, level]) => {
+      const ctrl = (window as any).__kiue.ctrl;
+      if (level) {
+        // fase real com a solução de referência, no lugar do grafo de stress
+        ctrl.startLevel(level);
+        ctrl.setBriefing(false);
+        ctrl.showSolution();
+      } else {
+        ctrl.graph = g;
+        ctrl.graphVersion++;
+      }
+      if (!(window as any).IDLE) {
+        ctrl.run();
+        ctrl.setSpeed(8);
+      }
+    },
+    [heavyGraph(), LEVEL] as const,
+  );
   await page.waitForTimeout(3000); // deixa o backlog crescer
   await page.evaluate((spec) => {
     const variant = spec.split('+');
-    const view = (window as any).__sqslearn.view;
+    const view = (window as any).__kiue.view;
     if (variant.includes('noshadow')) view.renderer.shadowMap.enabled = false;
     if (variant.includes('notokenshadow')) view.tokens.castShadow = false;
     if (variant.includes('tokenshadow')) view.tokens.castShadow = true;
@@ -73,6 +85,19 @@ test('custo por frame do renderer sob carga', async ({ page }) => {
       });
     }
     if (variant.includes('noaa')) view.renderer.getContext().canvas.style.imageRendering = 'auto';
+    if (variant.includes('noenv'))
+      view.scene.traverse((o: any) => {
+        if (o.material && 'envMap' in o.material) o.material.envMap = null;
+        if (o.material) o.material.needsUpdate = true;
+      });
+    if (variant.includes('noglass'))
+      view.scene.traverse((o: any) => {
+        if (o.material?.isMeshPhysicalMaterial) o.material.clearcoat = 0;
+      });
+    if (variant.includes('norim'))
+      view.scene.traverse((o: any) => {
+        if (o.isDirectionalLight && !o.castShadow) o.visible = false;
+      });
     if (variant.includes('nolabels')) view.labels.domElement.style.display = 'none';
   }, VARIANT);
 
@@ -96,7 +121,7 @@ test('custo por frame do renderer sob carga', async ({ page }) => {
           last = t;
           if (t - start < 6000) requestAnimationFrame(tick);
           else {
-            const sim = (window as any).__sqslearn.ctrl.sim;
+            const sim = (window as any).__kiue.ctrl.sim;
             let tokens = 0;
             if (sim) for (const q of sim.queues.values()) tokens += q.size;
             resolve({ frames, worst, tokens });

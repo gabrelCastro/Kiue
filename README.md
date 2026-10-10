@@ -1,10 +1,10 @@
-# SQSLearn
+# Kiuê
 
 Jogo 3D (three.js + Preact) para aprender **Amazon SQS** e **Amazon SNS**. Você monta arquiteturas de mensageria, roda uma simulação fiel ao comportamento da AWS e vê os pedidos circulando, sendo perdidos, duplicados, reordenados ou indo para a DLQ.
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
+npm run dev        # jogo em http://localhost:5173 + API de contas em :8787
 ```
 
 ## Conteúdo
@@ -31,6 +31,8 @@ src/sim     motor de simulação determinístico (TS puro, sem three.js)
 src/game    fases, objetivos, validação do grafo, controller, save, glossário, "na vida real"
 src/render  cena three.js: peças, conexões, mensagens (InstancedMesh), efeitos
 src/ui      interface Preact
+src/auth    estado de login no navegador (AuthStore); src/api: cliente HTTP
+server/     API de contas (Hono + SQLite); testes em server/tests
 tests/      testes do simulador, do controller e de todas as fases
 e2e/        testes Playwright que jogam pela interface
 docs/REQUISITOS.md  requisitos e regras de fidelidade
@@ -66,13 +68,49 @@ Fases são dados em `src/game/levels.ts`: grafo inicial, paleta, conceitos liber
 
 | Comando | O que faz |
 |---|---|
-| `npm run dev` | servidor de desenvolvimento |
+| `npm run dev` | jogo (Vite) + API juntos; `dev:web` e `dev:api` sobem cada um |
+| `npm start` | build + jogo e API num processo só, em modo produção (porta 8787) |
 | `npm test` | testes unitários (Vitest) |
 | `npm run e2e` | build + testes Playwright |
 | `npm run check` | typecheck + testes + build + e2e |
 | `npm run build` | gera o site estático em `dist/` |
 | `npm run bench` | mede o simulador (fases e cenários de carga) |
-| `npm run bench:render` | mede o custo por frame no navegador com um sandbox pesado |
+| `npm run bench:render` | mede o custo por frame no navegador com um sandbox pesado (`LEVEL=c12` mede uma fase real) |
+
+## Contas (back-end)
+
+Visitantes jogam as fases 1 e 2 da trilha Iniciante e um sandbox limitado (1 produtor, 1 tópico, 2 filas, 2 consumidores, 1 Lambda); o resto pede conta. A regra fica em `src/game/access.ts` e é aplicada no cliente (o conteúdo das fases está no bundle), então é uma porta de produto, não de segurança. Sem a API, o jogo segue no modo visitante e o botão **Entrar** avisa que as contas estão indisponíveis. Com a API, o jogador cria conta, entra, sai, troca o nome e a senha, desconecta outros aparelhos, redefine a senha por e-mail e exclui a conta.
+
+```
+server/src/app.ts            rotas (Hono) e middlewares: CSRF, sessão, limites, erros
+server/src/auth/service.ts   regras de negócio do login
+server/src/auth/password.ts  hash scrypt com parâmetros no próprio hash (permite subir o custo)
+server/src/repos.ts          interfaces de dados + implementação SQLite
+server/src/db.ts             SQLite nativo do Node (node:sqlite) com migrações versionadas
+server/src/mail.ts           envio de e-mail (console em desenvolvimento)
+```
+
+| Rota | O que faz |
+|---|---|
+| `GET /api/auth/session` | usuário logado ou `null` (usado a cada carga da página) |
+| `POST /api/auth/register` · `login` · `logout` | cadastro, login e saída |
+| `GET`/`PATCH /api/auth/me` | dados da conta / trocar o nome |
+| `POST /api/auth/password` | trocar a senha (pede a atual) |
+| `POST /api/auth/logout-others` | encerra as sessões dos outros aparelhos |
+| `POST /api/auth/password-reset/request` · `confirm` | link de uso único por e-mail |
+| `DELETE /api/auth/account` | exclui a conta (pede a senha) |
+
+**Decisões de segurança**
+- **Sessão em cookie** `httpOnly` + `SameSite=Lax` (+ `Secure` e prefixo `__Host-` em produção), em vez de JWT no `localStorage`: o JavaScript da página nunca vê o token. O banco guarda só o SHA-256 do token. A sessão expira em 30 dias sem uso (renova com o uso) e em 180 dias no máximo.
+- **CSRF**: toda requisição que muda estado precisa de `Origin` na lista permitida, além do `SameSite`.
+- **Senhas**: scrypt (N=2¹⁵) com sal por senha, comparação em tempo constante, regras do NIST (mínimo de 8 caracteres, bloqueio das mais óbvias, sem regras de composição).
+- **Sem enumeração de contas**: login responde igual para e-mail inexistente e senha errada (e gasta o mesmo tempo); "esqueci a senha" sempre responde 202.
+- **Limites de tentativa**: 5 falhas de login por conta e 30 por IP a cada 15 min; limites também para cadastro e redefinição.
+- **Troca ou redefinição de senha** derruba as outras sessões; o link de redefinição vale 30 min, é de uso único e um pedido novo invalida o anterior.
+
+Variáveis de ambiente (todas opcionais): `PORT` (8787), `DATABASE_PATH` (`data/kiue.db`), `APP_URL` (URL pública do jogo, usada nos links e como origem permitida), `ALLOWED_ORIGINS`, `SECURE_COOKIES`, `TRUST_PROXY` (atrás de proxy/CDN), `SESSION_IDLE_DAYS`, `SESSION_MAX_DAYS`, `RESET_TOKEN_MINUTES`, `SCRYPT_COST`, `STATIC_DIR`.
+
+Em desenvolvimento, o e-mail de redefinição aparece no terminal da API. Para produção falta plugar um `Mailer` real (ex.: Amazon SES). O serviço não conhece o SQLite: para levar a API para Lambda + DynamoDB basta outra implementação de `UserRepo`/`SessionRepo`/`ResetRepo`, e o Hono roda na Lambda sem mudar as rotas. Os limites de tentativa ficam em memória: com várias instâncias, precisam de um armazenamento compartilhado.
 
 ## Simplificações conscientes
 

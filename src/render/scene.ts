@@ -1,5 +1,5 @@
 import {
-  ACESFilmicToneMapping,
+  NeutralToneMapping,
   BoxGeometry,
   BufferGeometry,
   CircleGeometry,
@@ -16,14 +16,18 @@ import {
   MOUSE,
   Mesh,
   MeshBasicMaterial,
+  MeshLambertMaterial,
   MeshStandardMaterial,
   Object3D,
   OrthographicCamera,
   PCFSoftShadowMap,
+  PMREMGenerator,
   Plane,
   PlaneGeometry,
   Raycaster,
-  RingGeometry,
+  Path,
+  Shape,
+  ShapeGeometry,
   Scene,
   SRGBColorSpace,
   TubeGeometry,
@@ -31,35 +35,68 @@ import {
   Vector3,
   WebGLRenderer,
   type Curve,
+  type Texture,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { groupColor, POISON_COLOR, typeInfo } from '../game/catalog';
 import type { Controller } from '../game/controller';
+import { FOOTPRINT } from '../game/footprint';
 import { dlqIds } from '../game/graph';
 import { describeFilterPolicy } from '../sim/filter';
 import type { Simulation } from '../sim/engine';
 import type { GraphNode, SimEvent, Token } from '../sim/types';
 import { Effects } from './effects';
-import { dlqCurve, edgeCurve, lambdaSlot, queueSlot, workerSlot } from './layout';
-import { buildNode, NODE_COLORS, type NodeView } from './nodes';
+import { dlqCurve, edgeCurve, lambdaSlot, NODE_SCALE, QUEUE_DEPTH, QUEUE_LEN, queueSlot, workerSlot } from './layout';
+import { buildNode, NODE_COLORS, setNodeEnvironment, type NodeView } from './nodes';
 import { describeNode } from './labels';
 
 const MAX_TOKENS = 4000;
-const DIM_COLOR = new Color('#334155');
-const BAR_COLOR = new Color('#facc15');
+const DIM_COLOR = new Color('#d1d5db');
+const BAR_COLOR = new Color('#3d3d3d');
 /** Cores dos pads de worker por estado (pré-calculadas: o frame não interpreta strings). */
 const PAD = {
-  down: new Color('#ef4444'),
-  busy: new Color('#22c55e'),
-  polling: new Color('#38bdf8'),
-  off: new Color('#1e293b'),
-  idle: new Color('#475569'),
+  down: new Color('#d91515'),
+  busy: new Color('#29ad32'),
+  polling: new Color('#0099ff'),
+  off: new Color('#e9ebed'),
+  idle: new Color('#b4b4bb'),
 };
-const DOWN_BODY = new Color('#7f1d1d');
+const DOWN_BODY = new Color('#f4a3a3');
 const MAX_BARS = 300;
+const FLOOR_COLOR = '#f2f3f5';
+/** Contorno de seleção: preto, como o resto da interface. */
+const SELECT_COLOR = '#111111';
 const VIEW_WIDTH = 23;
 const VIEW_HEIGHT_MIN = 13;
+/** Direção da câmera (ortográfica): ~51° de elevação, olhando de +z. Mais baixa, as filas empilhadas se cobrem. */
+const CAMERA_DIR = new Vector3(0, 1.25, 1).normalize();
+const CAMERA_DISTANCE = 40;
+/** Limites do zoom automático ao abrir uma fase: perto o bastante para ver as peças, sem cortar a área de montagem. */
+const FIT_ZOOM_MIN = 0.8;
+const FIT_ZOOM_MAX = 1.5;
+
+/** Moldura de seleção: retângulo arredondado vazado, no chão, em volta da peça. */
+function frameGeometry(w: number, d: number, thickness = 0.07, radius = 0.35): ShapeGeometry {
+  const rect = (p: Path, hw: number, hd: number, r: number) => {
+    p.moveTo(-hw + r, -hd);
+    p.lineTo(hw - r, -hd);
+    p.quadraticCurveTo(hw, -hd, hw, -hd + r);
+    p.lineTo(hw, hd - r);
+    p.quadraticCurveTo(hw, hd, hw - r, hd);
+    p.lineTo(-hw + r, hd);
+    p.quadraticCurveTo(-hw, hd, -hw, hd - r);
+    p.lineTo(-hw, -hd + r);
+    p.quadraticCurveTo(-hw, -hd, -hw + r, -hd);
+  };
+  const outer = new Shape();
+  rect(outer, w / 2, d / 2, radius);
+  const hole = new Path();
+  rect(hole, w / 2 - thickness, d / 2 - thickness, radius - thickness);
+  outer.holes.push(hole);
+  return new ShapeGeometry(outer, 8);
+}
 
 interface EdgeView {
   key: string;
@@ -82,6 +119,8 @@ export class SceneView {
   private bars: InstancedMesh;
   private ghost: Mesh;
   private selectRing: Mesh;
+  private envMap: Texture;
+  private selectRingKind: 'queue' | 'piece' | null = null;
   private connectLine: Line;
   private effects: Effects;
   private builtVersion = -1;
@@ -111,6 +150,10 @@ export class SceneView {
   private invalidate = () => {
     this.dirty = true;
   };
+  /** Enquadra a fase sozinha até o jogador mexer na câmera. */
+  private autoFit = true;
+  /** Peça sob o ponteiro: o rótulo dela mostra os detalhes. */
+  private hoverId: string | null = null;
 
   constructor(
     private container: HTMLElement,
@@ -119,21 +162,24 @@ export class SceneView {
     this.renderer = new WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = SRGBColorSpace;
-    this.renderer.toneMapping = ACESFilmicToneMapping;
+    this.renderer.toneMapping = NeutralToneMapping;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFSoftShadowMap;
+    // só as peças fazem sombra e elas só mudam quando a arquitetura muda: o mapa de sombra é
+    // refeito nessas horas, não a cada frame (era ~40% do frame com muitas peças)
+    this.renderer.shadowMap.autoUpdate = false;
     container.appendChild(this.renderer.domElement);
 
     this.labels = new CSS2DRenderer();
     this.labels.domElement.className = 'label-layer';
     container.appendChild(this.labels.domElement);
 
-    this.scene.background = new Color('#0b1222');
-    this.scene.fog = new Fog('#0b1222', 40, 70);
+    this.scene.background = new Color(FLOOR_COLOR);
+    this.scene.fog = new Fog(FLOOR_COLOR, 55, 95);
 
     this.camera = new OrthographicCamera(-10, 10, 10, -10, 0.1, 200);
-    this.camera.position.set(0, 24, 17);
-    this.camera.lookAt(0, 0, 0.5);
+    this.camera.position.copy(CAMERA_DIR).multiplyScalar(CAMERA_DISTANCE);
+    this.camera.lookAt(0, 0, 0);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableRotate = false;
@@ -142,30 +188,44 @@ export class SceneView {
     this.controls.maxZoom = 3;
     this.controls.mouseButtons = { LEFT: null as unknown as MOUSE, MIDDLE: MOUSE.PAN, RIGHT: MOUSE.PAN };
     this.controls.addEventListener('change', this.invalidate);
+    this.controls.addEventListener('start', () => {
+      this.autoFit = false;
+    });
 
-    const hemi = new HemisphereLight('#dbeafe', '#1e293b', 1.4);
-    const sun = new DirectionalLight('#ffffff', 2.2);
+    // reflexos suaves de um "estúdio" gerado em código: dá volume às peças sem custo por frame
+    const pmrem = new PMREMGenerator(this.renderer);
+    this.envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    setNodeEnvironment(this.envMap);
+    pmrem.dispose();
+
+    const hemi = new HemisphereLight('#ffffff', '#c6ccd4', 1.5);
+    const sun = new DirectionalLight('#ffffff', 1.8);
     sun.position.set(8, 20, 10);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
+    // sombra suave: no chão claro, sombra cheia pesa demais
+    sun.shadow.intensity = 0.35;
     const s = sun.shadow.camera;
     s.left = -18;
     s.right = 18;
     s.top = 14;
     s.bottom = -14;
-    this.scene.add(hemi, sun);
+    // luz de contorno, por trás: separa o topo das peças do chão escuro
+    const rim = new DirectionalLight('#ffffff', 0.5);
+    rim.position.set(-10, 8, -14);
+    this.scene.add(hemi, sun, rim);
 
-    const floor = new Mesh(new PlaneGeometry(60, 44), new MeshStandardMaterial({ color: '#111a2e', roughness: 1 }));
+    const floor = new Mesh(new PlaneGeometry(60, 44), new MeshLambertMaterial({ color: FLOOR_COLOR }));
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -0.01;
     floor.receiveShadow = true;
-    const grid = new GridHelper(26, 26, '#1f2b46', '#17213a');
+    const grid = new GridHelper(26, 26, '#e1e4e8', '#e1e4e8');
     grid.scale.set(1, 1, 18 / 26);
     grid.position.y = 0.001;
     this.scene.add(floor, grid, this.world);
 
     const tokenMat = new MeshStandardMaterial({ roughness: 0.35, metalness: 0.1 });
-    this.tokens = new InstancedMesh(new BoxGeometry(0.26, 0.26, 0.26), tokenMat, MAX_TOKENS);
+    this.tokens = new InstancedMesh(new BoxGeometry(0.3, 0.3, 0.3), tokenMat, MAX_TOKENS);
     this.tokens.instanceMatrix.setUsage(DynamicDrawUsage);
     this.tokens.count = 0;
     // Sombra de milhares de cubos em movimento custa ~30% do frame; as peças continuam com sombra.
@@ -180,19 +240,19 @@ export class SceneView {
     this.bars.setColorAt(0, new Color());
     this.scene.add(this.bars);
 
-    this.ghost = new Mesh(new CircleGeometry(0.9, 32), new MeshBasicMaterial({ color: '#22c55e', transparent: true, opacity: 0.35 }));
+    this.ghost = new Mesh(new CircleGeometry(0.9, 32), new MeshBasicMaterial({ color: '#29ad32', transparent: true, opacity: 0.3 }));
     this.ghost.rotation.x = -Math.PI / 2;
     this.ghost.position.y = 0.02;
     this.ghost.visible = false;
     this.scene.add(this.ghost);
 
-    this.selectRing = new Mesh(new RingGeometry(1.05, 1.2, 48), new MeshBasicMaterial({ color: '#e2e8f0', transparent: true, opacity: 0.85 }));
+    this.selectRing = new Mesh(new BufferGeometry(), new MeshBasicMaterial({ color: SELECT_COLOR, transparent: true, opacity: 0.9 }));
     this.selectRing.rotation.x = -Math.PI / 2;
     this.selectRing.position.y = 0.03;
     this.selectRing.visible = false;
     this.scene.add(this.selectRing);
 
-    this.connectLine = new Line(new BufferGeometry(), new LineDashedMaterial({ color: '#38bdf8', dashSize: 0.3, gapSize: 0.2 }));
+    this.connectLine = new Line(new BufferGeometry(), new LineDashedMaterial({ color: '#0099ff', dashSize: 0.3, gapSize: 0.2 }));
     this.connectLine.visible = false;
     this.scene.add(this.connectLine);
 
@@ -229,6 +289,8 @@ export class SceneView {
     this.controls.dispose();
     this.clearWorld();
     this.effects.clear();
+    this.envMap.dispose();
+    setNodeEnvironment(null);
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.labels.domElement.remove();
@@ -277,6 +339,51 @@ export class SceneView {
     this.camera.top = viewH / 2;
     this.camera.bottom = -viewH / 2;
     this.camera.updateProjectionMatrix();
+    if (this.autoFit) this.fitCamera();
+  }
+
+  /**
+   * Centraliza e aproxima a câmera para a arquitetura da fase ocupar a tela. Projeta as caixas
+   * das peças (com espaço para o rótulo em cima) com zoom 1 e ajusta zoom e alvo a partir disso.
+   */
+  private fitCamera() {
+    const nodes = this.ctrl.level && this.ctrl.level.track !== 'sandbox' ? this.ctrl.graph.nodes : [];
+    const cam = this.camera;
+    this.controls.target.set(0, 0, 0);
+    cam.position.copy(CAMERA_DIR).multiplyScalar(CAMERA_DISTANCE);
+    cam.zoom = 1;
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld();
+    if (nodes.length > 0) {
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      const p = this.tmp;
+      for (const n of nodes) {
+        const { hx, hz } = FOOTPRINT[n.kind];
+        // em cima, o rótulo costuma ser mais largo que a peça
+        const lx = Math.max(hx, 2.6);
+        for (const [dx, dy, dz] of [[-hx, 0, hz], [hx, 0, hz], [-lx, 3.4, -hz], [lx, 3.4, -hz]]) {
+          p.set(n.x + dx, dy, n.z + dz).project(cam);
+          minX = Math.min(minX, p.x);
+          maxX = Math.max(maxX, p.x);
+          minY = Math.min(minY, p.y);
+          maxY = Math.max(maxY, p.y);
+        }
+      }
+      const zoom = Math.min(FIT_ZOOM_MAX, Math.max(FIT_ZOOM_MIN, Math.min((2 * 0.9) / (maxX - minX), (2 * 0.9) / (maxY - minY))));
+      // deslocamento do centro (em unidades do mundo com zoom 1), levado para o chão
+      const right = ((maxX + minX) / 2) * ((cam.right - cam.left) / 2);
+      const up = ((maxY + minY) / 2) * ((cam.top - cam.bottom) / 2);
+      const upDir = this.tmp2.setFromMatrixColumn(cam.matrixWorld, 1);
+      this.controls.target.set(right, 0, up / upDir.z);
+      cam.position.copy(CAMERA_DIR).multiplyScalar(CAMERA_DISTANCE).add(this.controls.target);
+      cam.zoom = zoom;
+      cam.updateProjectionMatrix();
+    }
+    this.controls.update();
+    this.dirty = true;
   }
 
   private simUnsub: (() => void) | null = null;
@@ -311,8 +418,10 @@ export class SceneView {
   private sync() {
     const levelId = this.ctrl.level?.id ?? null;
     if (this.builtVersion === this.ctrl.graphVersion && this.builtLevel === levelId) return;
+    const levelChanged = this.builtLevel !== levelId;
     this.builtVersion = this.ctrl.graphVersion;
     this.builtLevel = levelId;
+    if (levelChanged) this.autoFit = true;
     this.clearWorld();
     const g = this.ctrl.graph;
     const dlqs = dlqIds(g);
@@ -332,8 +441,8 @@ export class SceneView {
       this.curves.set(key, curve);
       const filtered = !!e.filterPolicy && Object.keys(e.filterPolicy).length > 0;
       const tube = new Mesh(
-        new TubeGeometry(curve, 48, 0.055, 6, false),
-        new MeshStandardMaterial({ color: from.kind === 'topic' ? '#c084fc' : '#64748b', roughness: 0.6, transparent: true, opacity: 0.85 }),
+        new TubeGeometry(curve, 48, 0.04, 6, false),
+        new MeshStandardMaterial({ color: from.kind === 'topic' ? '#a783ff' : '#879596', roughness: 0.6 }),
       );
       tube.receiveShadow = true;
       this.world.add(tube);
@@ -383,10 +492,15 @@ export class SceneView {
       div.className = 'edge-label dlq';
       div.textContent = `☠ após ${(n as GraphNode<'queue'>).config.maxReceiveCount} recebimentos`;
       const obj = new CSS2DObject(div);
-      obj.position.copy(curve.getPoint(0.5)).add(new Vector3(2.1, 0.1, 0));
+      // ancorado pela esquerda, logo depois da fila, para não ficar por baixo dela
+      obj.center.set(0, 0.5);
+      const mid = curve.getPoint(0.5);
+      obj.position.set(n.x + QUEUE_LEN / 2 + 0.3, mid.y + 0.1, mid.z);
       this.world.add(obj);
     }
     this.labelTimer = 0;
+    this.renderer.shadowMap.needsUpdate = true;
+    if (levelChanged) this.fitCamera();
   }
 
   // ───────────── animação ─────────────
@@ -436,7 +550,7 @@ export class SceneView {
     if (this.labelTimer <= 0) {
       this.labelTimer = 120;
       for (const v of this.nodeViews.values()) {
-        const html = describeNode(v.node, this.ctrl, sim);
+        const html = describeNode(v.node, this.ctrl, sim, this.hoverId === v.node.id || this.ctrl.selection?.id === v.node.id);
         if (v.label.innerHTML !== html) v.label.innerHTML = html;
         v.label.classList.toggle('selected', this.ctrl.selection?.id === v.node.id);
       }
@@ -453,10 +567,14 @@ export class SceneView {
     if (sel) {
       this.selectRing.visible = true;
       this.selectRing.position.set(sel.group.position.x, 0.03, sel.group.position.z);
-      const s = sel.node.kind === 'queue' ? 1.6 : 1;
-      this.selectRing.scale.set(s, 1, 1);
+      const kind = sel.node.kind === 'queue' ? 'queue' : 'piece';
+      if (this.selectRingKind !== kind) {
+        this.selectRingKind = kind;
+        this.selectRing.geometry.dispose();
+        this.selectRing.geometry = kind === 'queue' ? frameGeometry(QUEUE_LEN + 0.7, QUEUE_DEPTH + 0.7) : frameGeometry(2.4 * NODE_SCALE * 0.85, 2.4 * NODE_SCALE * 0.85);
+      }
       const connecting = this.ctrl.tool.type === 'connect';
-      (this.selectRing.material as MeshBasicMaterial).color.set(connecting ? '#38bdf8' : '#e2e8f0');
+      (this.selectRing.material as MeshBasicMaterial).color.set(connecting ? '#0099ff' : SELECT_COLOR);
       (this.selectRing.material as MeshBasicMaterial).opacity = connecting ? 0.6 + 0.3 * Math.sin(t * 6) : 0.85;
     } else this.selectRing.visible = false;
 
@@ -476,8 +594,9 @@ export class SceneView {
       const z = Math.round(this.hover.z);
       this.ghost.visible = true;
       this.ghost.position.set(x, 0.02, z);
-      this.ghost.scale.set(tool.item.kind === 'queue' ? 1.8 : 1, 1, 1);
-      (this.ghost.material as MeshBasicMaterial).color.set(this.ctrl.canPlaceAt(x, z) ? '#22c55e' : '#ef4444');
+      if (tool.item.kind === 'queue') this.ghost.scale.set((QUEUE_LEN + 0.3) / 1.8, (QUEUE_DEPTH + 0.3) / 1.8, 1);
+      else this.ghost.scale.setScalar(NODE_SCALE);
+      (this.ghost.material as MeshBasicMaterial).color.set(this.ctrl.canPlaceAt(tool.item.kind, x, z) ? '#29ad32' : '#d91515');
     } else this.ghost.visible = false;
   }
 
@@ -560,7 +679,7 @@ export class SceneView {
         }
         if (b < MAX_BARS) {
           const prog = Math.min(1, (now - w.start) / Math.max(1, w.until - w.start));
-          d.position.set(this.tmp.x - 0.2 + prog * 0.2, 1.4, this.tmp.z + 0.25);
+          d.position.set(this.tmp.x - 0.2 + prog * 0.2, this.tmp.y + 0.35, this.tmp.z + 0.3);
           d.rotation.set(0, 0, 0);
           d.scale.set(Math.max(0.01, prog * 0.4), 1, 1);
           d.updateMatrix();
@@ -722,15 +841,20 @@ export class SceneView {
       const view = this.nodeViews.get(this.drag.id);
       const x = Math.round(this.hover.x);
       const z = Math.round(this.hover.z);
-      if (view && (x !== view.group.position.x || z !== view.group.position.z) && this.ctrl.canPlaceAt(x, z, this.drag.id)) {
+      if (view && (x !== view.group.position.x || z !== view.group.position.z) && this.ctrl.canPlaceAt(view.node.kind, x, z, this.drag.id)) {
         view.group.position.set(x, 0, z);
         this.drag.moved = true;
+        this.renderer.shadowMap.needsUpdate = true;
       }
       el.style.cursor = 'grabbing';
       return;
     }
     const tool = this.ctrl.tool;
     const id = this.pickNode();
+    if (id !== this.hoverId) {
+      this.hoverId = id;
+      this.labelTimer = 0;
+    }
     el.style.cursor = tool.type === 'place' ? 'copy' : tool.type === 'connect' ? (id ? 'alias' : 'crosshair') : id ? 'pointer' : 'default';
   };
 

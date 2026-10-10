@@ -1,7 +1,9 @@
 import { defaultConsumer, defaultLambda, defaultProducer, defaultQueue, defaultTopic } from '../sim/defaults';
 import type { Simulation } from '../sim/engine';
 import type { ConfigByKind, FilterPolicy, Graph, GraphNode, NodeKind } from '../sim/types';
+import { requiresAccount, sandboxFor, type Access } from './access';
 import type { Concept } from './catalog';
+import { footprintsOverlap } from './footprint';
 import { evaluateGoal, evaluateRun, type GoalResult, type RunResult } from './goals';
 import { addEdge, connectionError, findNode, newId, removeNode, validateGraph } from './graph';
 import type { Level, PaletteItem } from './level-types';
@@ -19,8 +21,10 @@ export interface Toast {
   kind: 'error' | 'info' | 'warn';
 }
 
+/** Por que uma fase não abre: falta conta, ou falta concluir a anterior. */
+export type LockReason = 'account' | 'progress';
+
 export const SPEEDS = [0.5, 1, 2, 4, 8] as const;
-const MIN_DISTANCE = 2.2;
 const GRID_LIMIT_X = 12;
 const GRID_LIMIT_Z = 8;
 
@@ -54,6 +58,10 @@ export class Controller {
   showBriefing = false;
   showGlossary = false;
   progress: Progress = loadProgress();
+  /** Começa como visitante; quem cuida da autenticação avisa com `setAccess`. */
+  access: Access = 'guest';
+  /** Chamado quando alguém tenta abrir uma fase que pede conta (a UI abre o cadastro). */
+  onAccountRequired: (level: Level) => void = () => {};
 
   private listeners = new Set<() => void>();
   private simListeners = new Set<(sim: Simulation | null) => void>();
@@ -104,17 +112,46 @@ export class Controller {
     this.notify();
   }
 
-  isUnlocked(level: Level): boolean {
-    if (level.track === 'sandbox') return true;
+  lockReason(level: Level): LockReason | null {
+    if (requiresAccount(level, this.access)) return 'account';
+    if (level.track === 'sandbox') return null;
     const track = LEVELS.filter((l) => l.track === level.track);
     const idx = track.indexOf(level);
-    if (level.track === 'certificacao' && idx === 0) return (this.progress['i05']?.stars ?? 0) > 0;
-    return idx === 0 || (this.progress[track[idx - 1].id]?.stars ?? 0) > 0;
+    const done = (id: string) => (this.progress[id]?.stars ?? 0) > 0;
+    if (level.track === 'certificacao' && idx === 0) return done('i05') ? null : 'progress';
+    return idx === 0 || done(track[idx - 1].id) ? null : 'progress';
+  }
+
+  isUnlocked(level: Level): boolean {
+    return this.lockReason(level) === null;
+  }
+
+  setAccess(access: Access): void {
+    if (access === this.access) return;
+    this.access = access;
+    const level = this.level;
+    if (this.screen === 'level' && level) {
+      if (level.track === 'sandbox') {
+        // troca só a paleta: o que já foi montado continua na mesa
+        this.level = sandboxFor(access);
+        this.tool = { type: 'select' };
+      } else if (requiresAccount(level, access)) {
+        this.openMenu();
+        this.flash('Você saiu da conta. Entre de novo para continuar esta fase.', 'info');
+        return;
+      }
+    }
+    this.notify();
   }
 
   startLevel(id: string): void {
-    const level = levelById(id);
-    if (!level) return;
+    const found = levelById(id);
+    if (!found) return;
+    if (requiresAccount(found, this.access)) {
+      this.onAccountRequired(found);
+      return;
+    }
+    const level = found.track === 'sandbox' ? sandboxFor(this.access) : found;
     this.level = level;
     this.screen = 'level';
     this.attempts = 0;
@@ -196,20 +233,20 @@ export class Controller {
     return this.selection?.kind === 'node' ? findNode(this.graph, this.selection.id) : undefined;
   }
 
-  private positionError(x: number, z: number, ignoreId?: string): string | null {
+  private positionError(kind: NodeKind, x: number, z: number, ignoreId?: string): string | null {
     if (Math.abs(x) > GRID_LIMIT_X || Math.abs(z) > GRID_LIMIT_Z) return 'Fora da área de construção.';
-    const close = this.graph.nodes.some((n) => n.id !== ignoreId && Math.hypot(n.x - x, (n.z - z) * 1.4) < MIN_DISTANCE * (n.kind === 'queue' ? 1.3 : 1));
+    const close = this.graph.nodes.some((n) => n.id !== ignoreId && footprintsOverlap(kind, x, z, n.kind, n.x, n.z));
     return close ? 'Muito perto de outra peça.' : null;
   }
 
-  canPlaceAt(x: number, z: number, ignoreId?: string): boolean {
-    return this.positionError(x, z, ignoreId) === null;
+  canPlaceAt(kind: NodeKind, x: number, z: number, ignoreId?: string): boolean {
+    return this.positionError(kind, x, z, ignoreId) === null;
   }
 
   placeAt(x: number, z: number): void {
     if (this.tool.type !== 'place' || !this.canEdit) return;
     const item = this.tool.item;
-    const err = this.positionError(x, z);
+    const err = this.positionError(item.kind, x, z);
     if (err) {
       this.flash(err, 'warn');
       return;
@@ -243,7 +280,7 @@ export class Controller {
     const n = findNode(this.graph, id);
     if (!n || n.locked || !this.canEdit) return false;
     if (n.x === x && n.z === z) return true;
-    if (this.positionError(x, z, id)) return false;
+    if (this.positionError(n.kind, x, z, id)) return false;
     n.x = x;
     n.z = z;
     this.graphChanged();

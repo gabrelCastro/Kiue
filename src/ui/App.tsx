@@ -3,6 +3,7 @@ import { GLOSSARY } from '../game/glossary';
 import { useController } from './hooks';
 import { LevelScreen } from './LevelScreen';
 import { Menu } from './Menu';
+import { AuthDialog } from './auth/AuthDialog';
 import { prefetchScene } from './scene-loader';
 
 export function App() {
@@ -12,6 +13,7 @@ export function App() {
     <>
       {ctrl.screen === 'menu' ? <Menu /> : <LevelScreen />}
       {ctrl.showGlossary && <Glossary />}
+      <AuthDialog />
       {ctrl.screen === 'menu' && ctrl.toast && <div class={`toast floating ${ctrl.toast.kind}`}>{ctrl.toast.text}</div>}
     </>
   );

@@ -5,6 +5,7 @@ import type { GraphNode } from '../../src/sim/types';
 function open(id: string) {
   const c = new Controller();
   c.progress = {};
+  c.access = 'member';
   c.startLevel(id);
   return c;
 }
@@ -42,6 +43,18 @@ describe('Controller', () => {
     c.placeAt(-7, 0);
     expect(c.graph.nodes).toHaveLength(2);
     expect(c.toast?.kind).toBe('warn');
+  });
+
+  it('a sobreposição considera o tamanho de cada peça', () => {
+    const c = open('i01');
+    c.setTool({ type: 'place', item: c.level!.palette[0] });
+    // a fila é comprida: a 3 unidades do consumidor (x = 7) ela encostaria nele
+    c.placeAt(4, 0);
+    expect(c.graph.nodes).toHaveLength(2);
+    expect(c.canPlaceAt('queue', 3, 0)).toBe(true);
+    // e é rasa: outra fila cabe logo abaixo, coisa que um consumidor não faria
+    expect(c.canPlaceAt('queue', -7, 2)).toBe(true);
+    expect(c.canPlaceAt('consumer', -7, 2)).toBe(false);
   });
 
   it('peças do cenário não podem ser removidas', () => {
@@ -95,6 +108,7 @@ describe('Controller', () => {
   it('desbloqueio das trilhas', () => {
     const c = new Controller();
     c.progress = {};
+    c.access = 'member';
     expect(c.isUnlocked(levelById('i01')!)).toBe(true);
     expect(c.isUnlocked(levelById('i02')!)).toBe(false);
     expect(c.isUnlocked(levelById('c01')!)).toBe(false);
@@ -110,5 +124,62 @@ describe('Controller', () => {
     c.run();
     c.finishNow();
     expect(c.result?.stars).toBe(3);
+  });
+
+  describe('acesso de visitante', () => {
+    function guest() {
+      const c = new Controller();
+      c.progress = { i01: { stars: 3 }, i02: { stars: 3 }, i05: { stars: 3 } };
+      const asked: string[] = [];
+      c.onAccountRequired = (l) => asked.push(l.id);
+      return { c, asked };
+    }
+
+    it('libera só as fases 1 e 2, mesmo com progresso salvo', () => {
+      const { c } = guest();
+      expect(c.lockReason(levelById('i01')!)).toBeNull();
+      expect(c.lockReason(levelById('i02')!)).toBeNull();
+      expect(c.lockReason(levelById('i03')!)).toBe('account');
+      expect(c.lockReason(levelById('c01')!)).toBe('account');
+      c.setAccess('member');
+      expect(c.lockReason(levelById('i03')!)).toBeNull();
+      expect(c.lockReason(levelById('i04')!)).toBe('progress');
+    });
+
+    it('pede conta em vez de abrir uma fase fechada', () => {
+      const { c, asked } = guest();
+      c.startLevel('i03');
+      expect(c.screen).toBe('menu');
+      expect(asked).toEqual(['i03']);
+    });
+
+    it('sandbox de visitante tem menos peças e cresce ao entrar na conta', () => {
+      const { c } = guest();
+      c.startLevel('sandbox');
+      const queues = () => c.level!.palette.find((p) => p.kind === 'queue')!;
+      expect(queues().count).toBe(2);
+      c.setTool({ type: 'place', item: queues() });
+      c.placeAt(0, 4);
+      c.setTool({ type: 'place', item: queues() });
+      c.placeAt(4, -4);
+      expect(c.paletteRemaining(queues())).toBe(0);
+      c.setAccess('member');
+      expect(c.level!.id).toBe('sandbox');
+      expect(c.graph.nodes.filter((n) => n.kind === 'queue')).toHaveLength(2);
+      expect(c.paletteRemaining(queues())).toBe(18);
+    });
+
+    it('sair da conta no meio de uma fase fechada volta ao menu', () => {
+      const { c } = guest();
+      c.setAccess('member');
+      c.startLevel('i03');
+      expect(c.screen).toBe('level');
+      c.setAccess('guest');
+      expect(c.screen).toBe('menu');
+      c.setAccess('member');
+      c.startLevel('i02');
+      c.setAccess('guest');
+      expect(c.screen).toBe('level');
+    });
   });
 });

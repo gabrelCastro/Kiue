@@ -1,3 +1,4 @@
+import { footprintsOverlap } from '../../src/game/footprint';
 import { connectionError, validateGraph } from '../../src/game/graph';
 import { LEVELS } from '../../src/game/levels';
 import { runLevel, solutionGraph } from '../../src/game/run';
@@ -15,6 +16,18 @@ describe.each(LEVELS.map((l) => [l.id, l] as const))('fase %s', (_id, level) => 
     const failing = result.goals.filter((r) => r.status !== 'ok').map((r) => `${r.label}: ${r.detail}`);
     expect(failing).toEqual([]);
     expect({ stars: result.stars, p95: result.p95, api: result.apiCalls, end: sim.now }).toMatchObject({ stars: 3 });
+  });
+
+  it('nenhuma peça encosta em outra (estado inicial e solução)', () => {
+    for (const g of [level.graph, solutionGraph(level)]) {
+      const clash: string[] = [];
+      g.nodes.forEach((a, i) =>
+        g.nodes.slice(i + 1).forEach((b) => {
+          if (footprintsOverlap(a.kind, a.x, a.z, b.kind, b.x, b.z)) clash.push(`${a.id} × ${b.id}`);
+        }),
+      );
+      expect(clash).toEqual([]);
+    }
   });
 
   it('a solução respeita as regras de conexão e a paleta', () => {

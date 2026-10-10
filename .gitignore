@@ -3,3 +3,5 @@ dist
 HANDOFF.md
 test-results
 playwright-report
+data
+e2e/.auth

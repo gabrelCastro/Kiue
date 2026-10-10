@@ -9,7 +9,11 @@ export function useController(): Controller {
   const ctrl = useContext(ControllerContext);
   if (!ctrl) throw new Error('Controller ausente');
   const [, force] = useReducer((x: number) => x + 1, 0);
-  useEffect(() => ctrl.subscribe(() => force(undefined)), [ctrl]);
+  useEffect(() => {
+    const unsubscribe = ctrl.subscribe(() => force(undefined));
+    force(undefined); // pega mudanças entre a renderização e a inscrição
+    return unsubscribe;
+  }, [ctrl]);
   return ctrl;
 }
 

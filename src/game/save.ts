@@ -5,7 +5,7 @@ export interface LevelProgress {
 
 export type Progress = Record<string, LevelProgress>;
 
-const KEY = 'sqslearn:progress:v1';
+const KEY = 'kiue:progress:v1';
 
 export function loadProgress(): Progress {
   try {

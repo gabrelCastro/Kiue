@@ -50,7 +50,7 @@ export interface MessageType {
 export const MESSAGE_TYPES: MessageType[] = [
   { value: 'pedido', label: 'Pedido', color: '#2dd4bf' },
   { value: 'livro', label: 'Livro', color: '#60a5fa' },
-  { value: 'eletronico', label: 'Eletrônico', color: '#facc15' },
+  { value: 'eletronico', label: 'Eletrônico', color: '#f2b200' },
   { value: 'roupa', label: 'Roupa', color: '#f87171' },
   { value: 'comida', label: 'Comida', color: '#4ade80' },
 ];

@@ -8,7 +8,7 @@ async function shot(page: Page, name: string) {
 
 async function screenPos(page: Page, x: number, z: number, y = 0.5) {
   return page.evaluate(
-    ([x, z, y]) => (window as unknown as { __sqslearn: { project: (x: number, z: number, y: number) => { x: number; y: number } } }).__sqslearn.project(x, z, y),
+    ([x, z, y]) => (window as unknown as { __kiue: { project: (x: number, z: number, y: number) => { x: number; y: number } } }).__kiue.project(x, z, y),
     [x, z, y] as const,
   );
 }
@@ -24,7 +24,7 @@ test('joga a fase 1 pela interface e vence com 3 estrelas', async ({ page }) => 
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'SQSLearn' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Kiuê' })).toBeVisible();
   await shot(page, '01-menu');
 
   await page.getByRole('button', { name: /Primeiro pedido/ }).click();

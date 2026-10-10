@@ -16,8 +16,12 @@ function fmtSeconds(s: number): string {
   return `${s}s`;
 }
 
-/** HTML do rótulo flutuante de uma peça. */
-export function describeNode(node: GraphNode, ctrl: Controller, sim: Simulation | null): string {
+/**
+ * HTML do rótulo flutuante de uma peça. Montando a arquitetura, o rótulo fica enxuto (nome e
+ * selos) para não cobrir as peças; a configuração aparece com o ponteiro em cima ou na seleção.
+ * Rodando, a linha mostra os números ao vivo.
+ */
+export function describeNode(node: GraphNode, ctrl: Controller, sim: Simulation | null, detailed = true): string {
   const name = `<div class="nl-name">${escapeHtml(node.name)}</div>`;
   const lines: string[] = [];
   const badges: string[] = [];
@@ -98,5 +102,7 @@ export function describeNode(node: GraphNode, ctrl: Controller, sim: Simulation 
       break;
     }
   }
-  return `${name}${badges.length ? `<div class="nl-badges">${badges.join('')}</div>` : ''}${lines.map((l) => `<div class="nl-line">${l}</div>`).join('')}`;
+  const shown = sim || detailed ? lines : [];
+  const head = `<div class="nl-head">${name}${badges.length ? `<span class="nl-badges">${badges.join('')}</span>` : ''}</div>`;
+  return `${head}${shown.map((l) => `<div class="nl-line">${l}</div>`).join('')}`;
 }

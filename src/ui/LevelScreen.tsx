@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { KIND_LABEL } from '../game/catalog';
 import { SPEEDS } from '../game/controller';
 import type { GoalResult } from '../game/goals';
+import { auth } from '../auth/store';
+import { AccountButton } from './auth/AccountButton';
 import { loadScene } from './scene-loader';
 import { Briefing } from './Briefing';
 import { describeEvent, fmtTime, type LogLine } from './format';
@@ -49,7 +51,7 @@ function SceneHost() {
       if (disposed) return;
       const view = new SceneView(ref.current!, ctrl);
       // gancho para testes e2e
-      (window as unknown as { __sqslearn?: object }).__sqslearn = { ctrl, view, project: view.project.bind(view) };
+      (window as unknown as { __kiue?: object }).__kiue = { ctrl, view, project: view.project.bind(view) };
       dispose = () => view.dispose();
     });
     return () => {
@@ -115,6 +117,7 @@ function TopBar() {
         <button class="btn ghost" onClick={() => ctrl.setGlossary(true)}>
           Glossário
         </button>
+        <AccountButton />
       </div>
     </header>
   );
@@ -146,6 +149,15 @@ function Palette() {
         })}
       </div>
       {tool.type === 'place' && <p class="muted small">Clique no chão para colocar. <kbd>Esc</kbd> cancela.</p>}
+      {level.track === 'sandbox' && ctrl.access === 'guest' && (
+        <p class="sandbox-limit small">
+          Sandbox limitado para visitantes.{' '}
+          <button class="linklike" onClick={() => auth.open('register', { reason: 'Com uma conta, o sandbox libera até 20 filas, 10 tópicos, 20 consumidores e 10 funções Lambda.' })}>
+            Crie uma conta
+          </button>{' '}
+          para liberar todas as peças.
+        </p>
+      )}
     </div>
   );
 }

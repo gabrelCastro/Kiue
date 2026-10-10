@@ -1,4 +1,4 @@
-# SQSLearn — Requisitos
+# Kiuê — Requisitos
 
 Jogo 3D (three.js) de puzzle de arquitetura que ensina **Amazon SQS** e **Amazon SNS**.
 O jogador monta arquiteturas de mensageria, roda uma simulação fiel ao comportamento

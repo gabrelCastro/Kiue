@@ -1,4 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+import { MEMBER_STATE } from './global-setup';
+
+// fases fechadas para visitantes: roda logado
+test.use({ storageState: MEMBER_STATE });
 
 type Hook = {
   ctrl: { startLevel(id: string): void; setBriefing(v: boolean): void; progress: Record<string, unknown> };
@@ -11,10 +15,11 @@ async function openLevel(page: Page, id: string) {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
+  await expect(page.locator('.console-nav .account-btn')).toBeVisible(); // sessão confirmada antes de abrir fases fechadas
   await page.getByRole('button', { name: 'Sandbox' }).click();
-  await page.waitForFunction(() => '__sqslearn' in window);
+  await page.waitForFunction(() => '__kiue' in window);
   await page.evaluate((id) => {
-    const { ctrl } = (window as unknown as { __sqslearn: Hook }).__sqslearn;
+    const { ctrl } = (window as unknown as { __kiue: Hook }).__kiue;
     ctrl.startLevel(id);
     ctrl.setBriefing(false);
   }, id);
@@ -23,7 +28,7 @@ async function openLevel(page: Page, id: string) {
 }
 
 async function clickWorld(page: Page, x: number, z: number, y = 0.5) {
-  const p = await page.evaluate(([x, z, y]) => (window as unknown as { __sqslearn: Hook }).__sqslearn.project(x, z, y), [x, z, y] as const);
+  const p = await page.evaluate(([x, z, y]) => (window as unknown as { __kiue: Hook }).__kiue.project(x, z, y), [x, z, y] as const);
   await page.mouse.click(p.x, p.y);
 }
 
