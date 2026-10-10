@@ -1,9 +1,11 @@
 import { matchesFilterPolicy } from './filter';
+import { Deque, RingBuffer } from './heap';
 import { Metrics, type ApiName } from './metrics';
 import { DEDUP_WINDOW_MS, SqsQueue, type QueueContext, type QueueMessage } from './queue';
 import { Rng } from './rng';
 import {
   DEFAULT_SIM_OPTIONS,
+  isRoutine,
   type Graph,
   type GraphEdge,
   type GraphNode,
@@ -73,7 +75,8 @@ export interface ProducerState {
   emitted: number;
   acc: number;
   seqByGroup: Map<string, number>;
-  pending: PendingSend[];
+  /** Reenvios agendados (prazo fixo: vencem em ordem). */
+  pending: Deque<PendingSend>;
 }
 
 export interface TopicState {
@@ -150,8 +153,16 @@ export class Simulation {
   readonly metrics = new Metrics();
   now = 0;
   finished = false;
-  events: SimEvent[] = [];
-  transits: Transit[] = [];
+  /** Últimos eventos (para o log da interface). */
+  readonly recent = new RingBuffer<SimEvent>(EVENT_LOG_CAP);
+  /** Últimos eventos não rotineiros: sob carga, não são expulsos pela enxurrada de rotina. */
+  readonly notable = new RingBuffer<SimEvent>(EVENT_LOG_CAP);
+  /**
+   * Mensagens viajando entre peças. Cada duração tem a sua fila: como todas partem "agora",
+   * cada fila chega em ordem e basta olhar a frente.
+   */
+  private transitQueues = new Map<number, Deque<Transit>>();
+  private transitCount = 0;
   readonly producers = new Map<string, ProducerState>();
   readonly topics = new Map<string, TopicState>();
   readonly queues = new Map<string, SqsQueue>();
@@ -161,11 +172,14 @@ export class Simulation {
   private edges = new Map<string, GraphEdge>();
   private services = new Map<string, ServiceState>();
   private dlqIds = new Set<string>();
-  private snsRetries: PendingSnsRetry[] = [];
+  /** Filas com algum consumidor lendo delas. */
+  private consumedQueues = new Set<string>();
+  private snsRetries = new Deque<PendingSnsRetry>();
   private nextCopy = 1;
   private nextLogical = 1;
   private nextReceiptId = 1;
   private nextTransit = 1;
+  private carry = 0;
   private listeners: ((e: SimEvent) => void)[] = [];
   private readonly ctx: QueueContext;
 
@@ -192,7 +206,7 @@ export class Simulation {
             emitted: 0,
             acc: 1,
             seqByGroup: new Map(),
-            pending: [],
+            pending: new Deque(),
           });
           break;
         case 'topic':
@@ -210,6 +224,7 @@ export class Simulation {
           break;
       }
     }
+    for (const c of this.consumers.values()) if (c.source?.kind === 'queue') this.consumedQueues.add(c.source.id);
 
     const self = this;
     this.ctx = {
@@ -280,10 +295,20 @@ export class Simulation {
     };
   }
 
+  /** Cópia dos últimos eventos, do mais antigo ao mais novo. */
+  get events(): SimEvent[] {
+    return this.recent.toArray();
+  }
+
+  /** Mensagens em trânsito (em qualquer ordem). */
+  *transits(): IterableIterator<Transit> {
+    for (const q of this.transitQueues.values()) yield* q;
+  }
+
   private emit(e: SimEvent) {
     this.metrics.record(e);
-    this.events.push(e);
-    if (this.events.length > EVENT_LOG_CAP) this.events.splice(0, this.events.length - EVENT_LOG_CAP);
+    this.recent.push(e);
+    if (!isRoutine(e)) this.notable.push(e);
     for (const l of this.listeners) l(e);
   }
 
@@ -304,7 +329,7 @@ export class Simulation {
     this.tickTransits();
     for (const q of this.queues.values()) {
       q.tick(this.ctx);
-      this.metrics.trackDepth(q.id, q.messages.length);
+      this.metrics.trackDepth(q.id, q.size);
     }
     for (const c of this.consumers.values()) this.tickConsumer(c);
     if (this.now >= this.durationMs || this.isSettled()) this.finished = true;
@@ -312,8 +337,12 @@ export class Simulation {
 
   /** Avança até `ms` de tempo de jogo (ou até terminar). */
   advance(ms: number): void {
-    const target = this.now + ms;
-    while (!this.finished && this.now + TICK_MS <= target) this.step();
+    // Acumula o resto: um frame de 16 ms em 1× é menor que um tick e não pode se perder.
+    this.carry += ms;
+    while (!this.finished && this.carry >= TICK_MS) {
+      this.step();
+      this.carry -= TICK_MS;
+    }
   }
 
   runToEnd(): void {
@@ -340,11 +369,7 @@ export class Simulation {
         this.produce(p);
       }
     }
-    if (p.pending.length) {
-      const due = p.pending.filter((s) => s.at <= this.now);
-      p.pending = p.pending.filter((s) => s.at > this.now);
-      for (const s of due) this.send(p, s.token, true);
-    }
+    while (p.pending.size && p.pending.peek()!.at <= this.now) this.send(p, p.pending.shift()!.token, true);
   }
 
   private produce(p: ProducerState) {
@@ -443,19 +468,25 @@ export class Simulation {
     duration: number,
     extra: Pick<Transit, 'edgeId' | 'attempt'> = {},
   ) {
-    this.transits.push({ id: this.nextTransit++, token, from, to, start: this.now, end: this.now + duration, kind, ...extra });
+    let q = this.transitQueues.get(duration);
+    if (!q) this.transitQueues.set(duration, (q = new Deque()));
+    q.push({ id: this.nextTransit++, token, from, to, start: this.now, end: this.now + duration, kind, ...extra });
+    this.transitCount++;
   }
 
   private tickTransits() {
-    if (!this.transits.length) return;
-    const arrived: Transit[] = [];
-    this.transits = this.transits.filter((t) => {
-      if (t.end <= this.now) {
-        arrived.push(t);
-        return false;
-      }
-      return true;
-    });
+    if (!this.transitCount) return;
+    let arrived: Transit[] | null = null;
+    let sources = 0;
+    for (const q of this.transitQueues.values()) {
+      if (!q.size || q.peek()!.end > this.now) continue;
+      sources++;
+      while (q.size && q.peek()!.end <= this.now) (arrived ??= []).push(q.shift()!);
+    }
+    if (!arrived) return;
+    this.transitCount -= arrived.length;
+    // chegadas do mesmo passo são tratadas na ordem em que partiram
+    if (sources > 1) arrived.sort((a, b) => a.id - b.id);
     for (const t of arrived) {
       if (t.kind === 'receive') continue; // só visual; o worker controla o tempo
       const target = this.nodes.get(t.to);
@@ -519,11 +550,8 @@ export class Simulation {
   }
 
   private tickSnsRetries() {
-    if (!this.snsRetries.length) return;
-    const due = this.snsRetries.filter((r) => r.at <= this.now);
-    if (!due.length) return;
-    this.snsRetries = this.snsRetries.filter((r) => r.at > this.now);
-    for (const r of due) {
+    while (this.snsRetries.size && this.snsRetries.peek()!.at <= this.now) {
+      const r = this.snsRetries.shift()!;
       this.startTransit(r.token, r.edge.from, r.edge.to, 'deliver', DELIVER_MS, { edgeId: r.edge.id, attempt: r.attempt });
     }
   }
@@ -669,7 +697,7 @@ export class Simulation {
       let extended = 0;
       for (const b of w.batch) {
         if (b.receipt === null) continue;
-        const m = queue.messages.find((x) => x.receipt === b.receipt && x.inFlight);
+        const m = queue.inFlight(b.receipt);
         if (m && m.visibleAt - this.now < vt * HEARTBEAT_FRACTION && queue.extendVisibility(b.receipt, this.now)) extended++;
       }
       if (extended) {
@@ -802,13 +830,12 @@ export class Simulation {
 
   private isSettled(): boolean {
     for (const p of this.producers.values()) {
-      if (p.emitted < p.node.config.total || p.pending.length) return false;
+      if (p.emitted < p.node.config.total || p.pending.size) return false;
     }
-    if (this.transits.length || this.snsRetries.length) return false;
+    if (this.transitCount || this.snsRetries.size) return false;
     for (const q of this.queues.values()) {
-      if (q.messages.length === 0) continue;
-      const hasConsumer = [...this.consumers.values()].some((c) => c.source?.id === q.id);
-      if (hasConsumer || !this.dlqIds.has(q.id)) return false;
+      if (q.size === 0) continue;
+      if (this.consumedQueues.has(q.id) || !this.dlqIds.has(q.id)) return false;
     }
     for (const c of this.consumers.values()) {
       if (c.workers.some((w) => w.state === 'processing' || w.state === 'receiving')) return false;

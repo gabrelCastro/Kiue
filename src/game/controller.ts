@@ -19,7 +19,7 @@ export interface Toast {
   kind: 'error' | 'info' | 'warn';
 }
 
-export const SPEEDS = [1, 2, 4, 8] as const;
+export const SPEEDS = [0.5, 1, 2, 4, 8] as const;
 const MIN_DISTANCE = 2.2;
 const GRID_LIMIT_X = 12;
 const GRID_LIMIT_Z = 8;

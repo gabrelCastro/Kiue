@@ -22,6 +22,13 @@ describe('fila simples', () => {
     expect(sim.metrics.lost).toBe(3);
   });
 
+  it('advance acumula frames menores que um tick (1× a 60 fps)', () => {
+    const sim = new Simulation(graph([producer('p', { total: 100 }), queue('q')], [['p', 'q']]));
+    for (let i = 0; i < 60; i++) sim.advance(1000 / 60);
+    expect(sim.now).toBeGreaterThanOrEqual(950);
+    expect(sim.now).toBeLessThanOrEqual(1000);
+  });
+
   it('produtor ligado direto no consumidor perde mensagens quando ele está ocupado', () => {
     const sim = new Simulation(
       graph([producer('p', { rate: 5, total: 20 }), consumer('c', { processingTime: 1 })], [['p', 'c']]),
@@ -73,7 +80,7 @@ describe('visibility timeout e DLQ', () => {
     sim.runToEnd();
     expect(sim.now).toBe(30000);
     expect(sim.metrics.visibilityExpired).toBeGreaterThan(10);
-    expect(sim.queues.get('q')!.messages.length).toBe(5);
+    expect(sim.queues.get('q')!.size).toBe(5);
   });
 
   it('com maxReceiveCount=3 a mensagem vai para a DLQ após 3 recebimentos', () => {
@@ -95,7 +102,7 @@ describe('visibility timeout e DLQ', () => {
     const received = sim.events.filter((e) => e.type === 'received');
     expect(received).toHaveLength(3);
     expect(sim.metrics.movedToDlq).toBe(1);
-    expect(sim.queues.get('dlq')!.messages).toHaveLength(1);
+    expect(sim.queues.get('dlq')!.size).toBe(1);
     expect(sim.finished).toBe(true);
     expect(sim.now).toBeLessThan(sim.durationMs);
   });

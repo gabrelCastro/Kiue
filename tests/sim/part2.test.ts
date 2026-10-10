@@ -126,7 +126,7 @@ describe('SNS → endpoint HTTP', () => {
     sim.runToEnd();
     expect(sim.metrics.lost).toBe(0);
     expect(sim.metrics.snsDlq).toBeGreaterThan(0);
-    expect(sim.queues.get('sdlq')!.messages.length).toBe(sim.metrics.snsDlq);
+    expect(sim.queues.get('sdlq')!.size).toBe(sim.metrics.snsDlq);
   });
 
   it('retry entrega quando o endpoint volta a tempo', () => {

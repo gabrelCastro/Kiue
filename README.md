@@ -38,6 +38,26 @@ docs/REQUISITOS.md  requisitos e regras de fidelidade
 
 O simulador roda em passos fixos de 50 ms com RNG de seed fixa, então a mesma arquitetura sempre produz o mesmo resultado. O renderer só lê o estado (`sim.queues`, `sim.transits`, `sim.consumers`) e o stream de eventos; nunca altera a simulação.
 
+### Desempenho
+
+O jogo roda em tempo real com dezenas de milhares de mensagens (sandbox), então o simulador evita qualquer varredura O(n) por passo:
+
+| Onde | Estrutura | O que evita |
+|---|---|---|
+| Fila (`sim/queue.ts`) | lista em ordem de chegada com lápides e compactação; índice `receipt → mensagem` | `findIndex`/`splice` no DeleteMessage e no heartbeat |
+| Fila | contadores por estado (atrasada, visível, em voo) | contar a fila inteira para HUD e escala da Lambda |
+| Fila | min-heaps para delay, visibility timeout e retenção | percorrer todas as mensagens a cada passo |
+| Fila | piso de `seq` das visíveis + busca binária | pular as mensagens em voo no começo da fila |
+| Fila Standard | reordenamento best-effort gerado sob demanda | sortear um número por mensagem visível a cada ReceiveMessage |
+| Fila FIFO | índice por `MessageGroupId` + merge k-way das cabeças dos grupos | varrer a fila inteira para achar grupos livres |
+| Janela de dedup, retries do SNS, reenvios, trânsitos | filas FIFO (`Deque`): prazos fixos vencem em ordem | filtrar listas inteiras a cada passo |
+| Log de eventos | buffers circulares (todos e só os notáveis) | `splice(0, …)` a cada evento e o log "sumir" sob carga |
+| Métricas | latências ordenadas com merge incremental; máximo e mínimo acumulados | reordenar tudo a cada consulta da HUD; `Math.max(...array)` estourar a pilha |
+
+No renderer: cena desenhada só quando algo muda (montando, pausado ou no resultado não gasta GPU), cubos de mensagem sem sombra, cores pré-convertidas e nenhuma alocação por frame. three.js fica num chunk separado, baixado em segundo plano enquanto o menu está aberto.
+
+`tests/perf/golden.test.ts` guarda uma impressão digital do stream de eventos de todas as fases e de cenários de carga: uma otimização que mude qualquer resultado quebra o teste.
+
 ### Adicionar uma fase
 
 Fases são dados em `src/game/levels.ts`: grafo inicial, paleta, conceitos liberados no inspetor, objetivos, metas de estrela, lições, quiz e uma função `solve` com a solução de referência. O teste `tests/game/levels.test.ts` garante automaticamente que o estado inicial falha e que a solução vence com 3 estrelas.
@@ -51,6 +71,8 @@ Fases são dados em `src/game/levels.ts`: grafo inicial, paleta, conceitos liber
 | `npm run e2e` | build + testes Playwright |
 | `npm run check` | typecheck + testes + build + e2e |
 | `npm run build` | gera o site estático em `dist/` |
+| `npm run bench` | mede o simulador (fases e cenários de carga) |
+| `npm run bench:render` | mede o custo por frame no navegador com um sandbox pesado |
 
 ## Simplificações conscientes
 

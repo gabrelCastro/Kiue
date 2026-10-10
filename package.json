@@ -11,7 +11,9 @@
     "test:watch": "vitest",
     "preview": "vite preview",
     "e2e": "npm run build && playwright test",
-    "check": "npm run typecheck && npm run test && npm run build && playwright test"
+    "check": "npm run typecheck && npm run test && npm run build && playwright test",
+    "bench": "vitest run --config bench/vitest.config.ts",
+    "bench:render": "npm run build && playwright test -c bench/playwright.config.ts --reporter=list"
   },
   "dependencies": {
     "preact": "^11.0.0",

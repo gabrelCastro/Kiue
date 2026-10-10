@@ -1,11 +1,13 @@
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { GLOSSARY } from '../game/glossary';
 import { useController } from './hooks';
 import { LevelScreen } from './LevelScreen';
 import { Menu } from './Menu';
+import { prefetchScene } from './scene-loader';
 
 export function App() {
   const ctrl = useController();
+  useEffect(prefetchScene, []);
   return (
     <>
       {ctrl.screen === 'menu' ? <Menu /> : <LevelScreen />}

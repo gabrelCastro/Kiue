@@ -57,6 +57,9 @@ export class Metrics {
   s3Puts = 0;
   snsDlqLogical = new Set<number>();
   latencies: number[] = [];
+  private sortedLatencies: number[] = [];
+  private maxLat = -Infinity;
+  private minLat = Infinity;
   producedInfo = new Map<number, ProducedInfo>();
   processedBy = new Map<string, Set<number>>();
   dlqLogical = new Set<number>();
@@ -100,6 +103,8 @@ export class Metrics {
       case 'processed': {
         this.processed++;
         this.latencies.push(e.latency);
+        if (e.latency > this.maxLat) this.maxLat = e.latency;
+        if (e.latency < this.minLat) this.minLat = e.latency;
         let set = this.processedBy.get(e.node);
         if (!set) this.processedBy.set(e.node, (set = new Set()));
         set.add(e.token.logicalId);
@@ -168,21 +173,39 @@ export class Metrics {
     if (depth > (this.maxDepth.get(queueId) ?? 0)) this.maxDepth.set(queueId, depth);
   }
 
+  /**
+   * Latências em ordem. A HUD consulta o p95 várias vezes por segundo: em vez de reordenar tudo,
+   * ordena só as que chegaram desde a última consulta e intercala (O(n + k log k)).
+   */
+  private sorted(): number[] {
+    const done = this.sortedLatencies;
+    const all = this.latencies;
+    if (done.length === all.length) return done;
+    const fresh = all.slice(done.length).sort((a, b) => a - b);
+    const merged = new Array<number>(all.length);
+    let i = 0;
+    let j = 0;
+    let k = 0;
+    while (i < done.length && j < fresh.length) merged[k++] = done[i] <= fresh[j] ? done[i++] : fresh[j++];
+    while (i < done.length) merged[k++] = done[i++];
+    while (j < fresh.length) merged[k++] = fresh[j++];
+    this.sortedLatencies = merged;
+    return merged;
+  }
+
   /** Percentil de latência em segundos (0 se não houver dados). */
   latencyPercentile(p: number): number {
     if (this.latencies.length === 0) return 0;
-    const sorted = [...this.latencies].sort((a, b) => a - b);
+    const sorted = this.sorted();
     const idx = Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1);
     return sorted[Math.max(0, idx)] / 1000;
   }
 
   maxLatency(): number {
-    if (this.latencies.length === 0) return 0;
-    return Math.max(...this.latencies) / 1000;
+    return this.latencies.length ? this.maxLat / 1000 : 0;
   }
 
   minLatency(): number {
-    if (this.latencies.length === 0) return 0;
-    return Math.min(...this.latencies) / 1000;
+    return this.latencies.length ? this.minLat / 1000 : 0;
   }
 }

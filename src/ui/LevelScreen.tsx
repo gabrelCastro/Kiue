@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { KIND_LABEL } from '../game/catalog';
 import { SPEEDS } from '../game/controller';
 import type { GoalResult } from '../game/goals';
-import { SceneView } from '../render/scene';
+import { loadScene } from './scene-loader';
 import { Briefing } from './Briefing';
 import { describeEvent, fmtTime, type LogLine } from './format';
 import { useController, useTicker } from './hooks';
@@ -43,10 +43,19 @@ function SceneHost() {
   const ctrl = useController();
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const view = new SceneView(ref.current!, ctrl);
-    // gancho para testes e2e
-    (window as unknown as { __sqslearn?: object }).__sqslearn = { ctrl, project: view.project.bind(view) };
-    return () => view.dispose();
+    let disposed = false;
+    let dispose = () => {};
+    void loadScene().then(({ SceneView }) => {
+      if (disposed) return;
+      const view = new SceneView(ref.current!, ctrl);
+      // gancho para testes e2e
+      (window as unknown as { __sqslearn?: object }).__sqslearn = { ctrl, view, project: view.project.bind(view) };
+      dispose = () => view.dispose();
+    });
+    return () => {
+      disposed = true;
+      dispose();
+    };
   }, [ctrl]);
   return <div class="scene-host" ref={ref} />;
 }
@@ -78,7 +87,7 @@ function TopBar() {
         <div class="segmented" role="group" aria-label="Velocidade">
           {SPEEDS.map((s) => (
             <button key={s} class={ctrl.speed === s ? 'active' : ''} onClick={() => ctrl.setSpeed(s)} aria-pressed={ctrl.speed === s}>
-              {s}×
+              {String(s).replace('.', ',')}×
             </button>
           ))}
         </div>
@@ -275,8 +284,9 @@ function EventLog() {
   const sim = ctrl.sim;
   const lines: LogLine[] = [];
   if (sim) {
-    for (let i = sim.events.length - 1; i >= 0 && lines.length < 60; i--) {
-      const l = describeEvent(sim.events[i], ctrl.graph, verbose);
+    const source = verbose ? sim.recent : sim.notable;
+    for (let i = source.length - 1; i >= 0 && lines.length < 60; i--) {
+      const l = describeEvent(source.at(i), ctrl.graph, verbose);
       if (l) lines.push(l);
     }
   }

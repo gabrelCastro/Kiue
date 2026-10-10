@@ -1,0 +1,163 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`fingerprint determinístico > carga fifo-groups 1`] = `"ca4fbf98 {"now":111200,"produced":15000,"processed":14910,"lost":0,"dup":0,"ooo":236,"dlq":90,"api":{"SendMessage":15736,"Publish":0,"ReceiveMessage":1575,"DeleteMessage":6,"DeleteMessageBatch":1547,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":46.3,"max":61.1}"`;
+
+exports[`fingerprint determinístico > carga lambda 1`] = `"6d59d4b2 {"now":249450,"produced":15000,"processed":14858,"lost":0,"dup":0,"ooo":0,"dlq":142,"api":{"SendMessage":15000,"Publish":0,"ReceiveMessage":1911,"DeleteMessage":0,"DeleteMessageBatch":1502,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":19.35,"max":20.25}"`;
+
+exports[`fingerprint determinístico > carga sns-fanout 1`] = `"51202f9a {"now":107600,"produced":10000,"processed":49684,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":0,"Publish":10000,"ReceiveMessage":4899,"DeleteMessage":6,"DeleteMessageBatch":4800,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":52.95,"max":57.6}"`;
+
+exports[`fingerprint determinístico > carga standard-backlog 1`] = `"6e4ed6c3 {"now":121850,"produced":20000,"processed":19793,"lost":0,"dup":798,"ooo":0,"dlq":217,"api":{"SendMessage":20389,"Publish":0,"ReceiveMessage":5288,"DeleteMessage":2423,"DeleteMessageBatch":1971,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":55.95,"max":65.75}"`;
+
+exports[`fingerprint determinístico > fase c01 1`] = `
+{
+  "initial": "c018838f {"now":14550,"produced":30,"processed":0,"lost":30,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":0,"Publish":0,"ReceiveMessage":0,"DeleteMessage":0,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":0,"max":0}",
+  "solved": "df251c2e {"now":17600,"produced":30,"processed":60,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":0,"Publish":30,"ReceiveMessage":63,"DeleteMessage":60,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":3.45,"max":4.05}",
+}
+`;
+
+exports[`fingerprint determinístico > fase c02 1`] = `
+{
+  "initial": "35f688b7 {"now":122000,"produced":60,"processed":45,"lost":16,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":60,"Publish":0,"ReceiveMessage":48,"DeleteMessage":45,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":57.3,"max":60.65}",
+  "solved": "37f4adcc {"now":126950,"produced":60,"processed":60,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":60,"Publish":0,"ReceiveMessage":63,"DeleteMessage":60,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":85.35,"max":90.65}",
+}
+`;
+
+exports[`fingerprint determinístico > fase c03 1`] = `
+{
+  "initial": "bebf3590 {"now":20150,"produced":20,"processed":20,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":20,"Publish":0,"ReceiveMessage":22,"DeleteMessage":20,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.2,"max":1.2}",
+  "solved": "6d8756d5 {"now":30150,"produced":20,"processed":20,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":20,"Publish":0,"ReceiveMessage":22,"DeleteMessage":20,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":11.2,"max":11.2}",
+}
+`;
+
+exports[`fingerprint determinístico > fase c04 1`] = `
+{
+  "initial": "daf41c75 {"now":120000,"produced":80,"processed":80,"lost":0,"dup":224,"ooo":0,"dlq":0,"api":{"SendMessage":80,"Publish":0,"ReceiveMessage":43,"DeleteMessage":4,"DeleteMessageBatch":37,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":11.6,"max":13}",
+  "solved": "cf2bca45 {"now":24700,"produced":80,"processed":80,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":80,"Publish":0,"ReceiveMessage":19,"DeleteMessage":4,"DeleteMessageBatch":14,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":5.75,"max":6.8}",
+}
+`;
+
+exports[`fingerprint determinístico > fase c05 1`] = `
+{
+  "initial": "869dd9d4 {"now":29000,"produced":30,"processed":0,"lost":41,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":41,"Publish":0,"ReceiveMessage":2,"DeleteMessage":0,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":0,"max":0}",
+  "solved": "172d63ce {"now":30100,"produced":30,"processed":30,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":38,"Publish":0,"ReceiveMessage":30,"DeleteMessage":30,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.15,"max":1.2}",
+}
+`;
+
+exports[`fingerprint determinístico > fase c06 1`] = `
+{
+  "initial": "d6efa5a6 {"now":193250,"produced":60,"processed":45,"lost":0,"dup":27,"ooo":0,"dlq":31,"api":{"SendMessage":60,"Publish":0,"ReceiveMessage":34,"DeleteMessage":4,"DeleteMessageBatch":3,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":7.8,"max":125.2}",
+  "solved": "e640591d {"now":196300,"produced":60,"processed":56,"lost":0,"dup":0,"ooo":0,"dlq":4,"api":{"SendMessage":60,"Publish":0,"ReceiveMessage":34,"DeleteMessage":3,"DeleteMessageBatch":7,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":9.3,"max":10.3}",
+}
+`;
+
+exports[`fingerprint determinístico > fase c07 1`] = `
+{
+  "initial": "3ae8d838 {"now":132050,"produced":120,"processed":120,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":120,"Publish":0,"ReceiveMessage":257,"DeleteMessage":116,"DeleteMessageBatch":2,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":121.2,"max":121.3}",
+  "solved": "8dbe14e3 {"now":36300,"produced":120,"processed":120,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":120,"Publish":0,"ReceiveMessage":51,"DeleteMessage":30,"DeleteMessageBatch":18,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":6.5,"max":7.85}",
+}
+`;
+
+exports[`fingerprint determinístico > fase c08 1`] = `
+{
+  "initial": "a6edb10 {"now":91250,"produced":40,"processed":40,"lost":0,"dup":12,"ooo":0,"dlq":0,"api":{"SendMessage":40,"Publish":0,"ReceiveMessage":57,"DeleteMessage":52,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":17.45,"max":17.8}",
+  "solved": "18745811 {"now":72350,"produced":40,"processed":40,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":40,"Publish":0,"ReceiveMessage":45,"DeleteMessage":40,"DeleteMessageBatch":0,"ChangeMessageVisibility":37,"ChangeMessageVisibilityBatch":0},"p95":9.75,"max":12.85}",
+}
+`;
+
+exports[`fingerprint determinístico > fase c09 1`] = `
+{
+  "initial": "14dc6068 {"now":50800,"produced":40,"processed":61,"lost":19,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":0,"Publish":40,"ReceiveMessage":41,"DeleteMessage":40,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":17.8,"max":17.9}",
+  "solved": "72e970ff {"now":50800,"produced":40,"processed":61,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":0,"Publish":40,"ReceiveMessage":41,"DeleteMessage":40,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":17.8,"max":17.9}",
+}
+`;
+
+exports[`fingerprint determinístico > fase c10 1`] = `
+{
+  "initial": "41686da1 {"now":71150,"produced":60,"processed":60,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":60,"Publish":0,"ReceiveMessage":62,"DeleteMessage":60,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":48.9,"max":51.45}",
+  "solved": "4b080b56 {"now":25050,"produced":60,"processed":60,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":60,"Publish":0,"ReceiveMessage":62,"DeleteMessage":60,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":5.3,"max":6.05}",
+}
+`;
+
+exports[`fingerprint determinístico > fase c11 1`] = `
+{
+  "initial": "fe3b3ddf {"now":30250,"produced":30,"processed":23,"lost":7,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":352,"Publish":0,"ReceiveMessage":23,"DeleteMessage":23,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.3,"max":1.3}",
+  "solved": "71dfd92d {"now":30200,"produced":30,"processed":30,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":30,"Publish":0,"ReceiveMessage":30,"DeleteMessage":30,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.3,"max":1.3}",
+}
+`;
+
+exports[`fingerprint determinístico > fase c12 1`] = `
+{
+  "initial": "313c7fe8 {"now":22050,"produced":45,"processed":0,"lost":45,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":0,"Publish":0,"ReceiveMessage":0,"DeleteMessage":0,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":0,"max":0}",
+  "solved": "a493cbee {"now":30450,"produced":45,"processed":115,"lost":0,"dup":0,"ooo":0,"dlq":5,"api":{"SendMessage":0,"Publish":45,"ReceiveMessage":128,"DeleteMessage":115,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":8.05,"max":10.85}",
+}
+`;
+
+exports[`fingerprint determinístico > fase i01 1`] = `
+{
+  "initial": "56b00616 {"now":14000,"produced":15,"processed":0,"lost":15,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":0,"Publish":0,"ReceiveMessage":0,"DeleteMessage":0,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":0,"max":0}",
+  "solved": "315b4347 {"now":15550,"produced":15,"processed":15,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":15,"Publish":0,"ReceiveMessage":15,"DeleteMessage":15,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.55,"max":1.55}",
+}
+`;
+
+exports[`fingerprint determinístico > fase i02 1`] = `
+{
+  "initial": "c98c87a0 {"now":18000,"produced":40,"processed":15,"lost":25,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":0,"Publish":0,"ReceiveMessage":0,"DeleteMessage":0,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.35,"max":1.35}",
+  "solved": "4291a353 {"now":47450,"produced":40,"processed":40,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":40,"Publish":0,"ReceiveMessage":40,"DeleteMessage":40,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":29.05,"max":30.7}",
+}
+`;
+
+exports[`fingerprint determinístico > fase i03 1`] = `
+{
+  "initial": "4c52d243 {"now":76000,"produced":60,"processed":60,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":60,"Publish":0,"ReceiveMessage":60,"DeleteMessage":60,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":53.75,"max":56.3}",
+  "solved": "5d7205b1 {"now":21500,"produced":60,"processed":60,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":60,"Publish":0,"ReceiveMessage":63,"DeleteMessage":60,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.95,"max":2.05}",
+}
+`;
+
+exports[`fingerprint determinístico > fase i04 1`] = `
+{
+  "initial": "3c798f52 {"now":19000,"produced":20,"processed":0,"lost":20,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":0,"Publish":0,"ReceiveMessage":0,"DeleteMessage":0,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":0,"max":0}",
+  "solved": "21a562f1 {"now":20850,"produced":20,"processed":60,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":0,"Publish":20,"ReceiveMessage":62,"DeleteMessage":60,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.9,"max":1.9}",
+}
+`;
+
+exports[`fingerprint determinístico > fase i05 1`] = `
+{
+  "initial": "4e71a943 {"now":19850,"produced":30,"processed":0,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":0,"Publish":30,"ReceiveMessage":0,"DeleteMessage":0,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":0,"max":0}",
+  "solved": "38dbda58 {"now":21250,"produced":30,"processed":51,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":0,"Publish":30,"ReceiveMessage":53,"DeleteMessage":51,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":2.05,"max":2.1}",
+}
+`;
+
+exports[`fingerprint determinístico > fase i06 1`] = `
+{
+  "initial": "cd403f79 {"now":120000,"produced":30,"processed":27,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":30,"Publish":0,"ReceiveMessage":98,"DeleteMessage":27,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.4,"max":1.4}",
+  "solved": "30bed9b9 {"now":44000,"produced":30,"processed":26,"lost":0,"dup":0,"ooo":0,"dlq":4,"api":{"SendMessage":30,"Publish":0,"ReceiveMessage":40,"DeleteMessage":26,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.4,"max":1.4}",
+}
+`;
+
+exports[`fingerprint determinístico > fase i07 1`] = `
+{
+  "initial": "39c1768c {"now":120000,"produced":30,"processed":30,"lost":0,"dup":35,"ooo":0,"dlq":0,"api":{"SendMessage":30,"Publish":0,"ReceiveMessage":67,"DeleteMessage":65,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":33.5,"max":36.35}",
+  "solved": "85f71866 {"now":51900,"produced":30,"processed":30,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":30,"Publish":0,"ReceiveMessage":31,"DeleteMessage":30,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":22.35,"max":22.9}",
+}
+`;
+
+exports[`fingerprint determinístico > fase i08 1`] = `
+{
+  "initial": "ec914544 {"now":21000,"produced":40,"processed":40,"lost":0,"dup":14,"ooo":0,"dlq":0,"api":{"SendMessage":49,"Publish":0,"ReceiveMessage":55,"DeleteMessage":54,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.5,"max":1.55}",
+  "solved": "44246d13 {"now":21000,"produced":40,"processed":40,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":49,"Publish":0,"ReceiveMessage":55,"DeleteMessage":54,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.5,"max":1.55}",
+}
+`;
+
+exports[`fingerprint determinístico > fase i09 1`] = `
+{
+  "initial": "a6509d8f {"now":15800,"produced":45,"processed":45,"lost":0,"dup":0,"ooo":4,"dlq":0,"api":{"SendMessage":45,"Publish":0,"ReceiveMessage":48,"DeleteMessage":45,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.85,"max":1.9}",
+  "solved": "10b35ab1 {"now":24400,"produced":45,"processed":45,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":45,"Publish":0,"ReceiveMessage":48,"DeleteMessage":45,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":9.7,"max":9.75}",
+}
+`;
+
+exports[`fingerprint determinístico > fase i10 1`] = `
+{
+  "initial": "7cadf3a2 {"now":96250,"produced":20,"processed":20,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":20,"Publish":0,"ReceiveMessage":1397,"DeleteMessage":20,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.35,"max":1.35}",
+  "solved": "eb1df87f {"now":96100,"produced":20,"processed":20,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":20,"Publish":0,"ReceiveMessage":30,"DeleteMessage":20,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.2,"max":1.2}",
+}
+`;

@@ -46,6 +46,17 @@ import { buildNode, NODE_COLORS, type NodeView } from './nodes';
 import { describeNode } from './labels';
 
 const MAX_TOKENS = 4000;
+const DIM_COLOR = new Color('#334155');
+const BAR_COLOR = new Color('#facc15');
+/** Cores dos pads de worker por estado (pré-calculadas: o frame não interpreta strings). */
+const PAD = {
+  down: new Color('#ef4444'),
+  busy: new Color('#22c55e'),
+  polling: new Color('#38bdf8'),
+  off: new Color('#1e293b'),
+  idle: new Color('#475569'),
+};
+const DOWN_BODY = new Color('#7f1d1d');
 const MAX_BARS = 300;
 const VIEW_WIDTH = 23;
 const VIEW_HEIGHT_MIN = 13;
@@ -83,11 +94,23 @@ export class SceneView {
   private dummy = new Object3D();
   private color = new Color();
   private tmp = new Vector3();
+  private tmp2 = new Vector3();
+  /** Cor de cada valor de `#hex`, convertida uma vez só. */
+  private colors = new Map<string, Color>();
   private labelTimer = 0;
   private unsubSim: (() => void) | null = null;
   private resizeObserver: ResizeObserver;
   private disposed = false;
   private lastTime = performance.now();
+  /**
+   * Renderização sob demanda: a cena parada (montando a arquitetura, pausado, resultado) não é
+   * redesenhada a cada frame. Qualquer entrada, mudança de estado ou animação marca `dirty`.
+   */
+  private dirty = true;
+  private lastSignature = '';
+  private invalidate = () => {
+    this.dirty = true;
+  };
 
   constructor(
     private container: HTMLElement,
@@ -118,6 +141,7 @@ export class SceneView {
     this.controls.minZoom = 0.5;
     this.controls.maxZoom = 3;
     this.controls.mouseButtons = { LEFT: null as unknown as MOUSE, MIDDLE: MOUSE.PAN, RIGHT: MOUSE.PAN };
+    this.controls.addEventListener('change', this.invalidate);
 
     const hemi = new HemisphereLight('#dbeafe', '#1e293b', 1.4);
     const sun = new DirectionalLight('#ffffff', 2.2);
@@ -144,7 +168,8 @@ export class SceneView {
     this.tokens = new InstancedMesh(new BoxGeometry(0.26, 0.26, 0.26), tokenMat, MAX_TOKENS);
     this.tokens.instanceMatrix.setUsage(DynamicDrawUsage);
     this.tokens.count = 0;
-    this.tokens.castShadow = true;
+    // Sombra de milhares de cubos em movimento custa ~30% do frame; as peças continuam com sombra.
+    this.tokens.castShadow = false;
     this.tokens.frustumCulled = false;
     this.tokens.setColorAt(0, new Color());
     this.scene.add(this.tokens);
@@ -217,13 +242,30 @@ export class SceneView {
     this.lastTime = now;
     this.ctrl.frame(dt);
     this.sync();
-    this.animate(now, dt);
-    this.renderer.render(this.scene, this.camera);
-    this.labels.render(this.scene, this.camera);
+    const running = this.ctrl.mode === 'run' && !this.ctrl.paused && this.ctrl.sim !== null;
+    const signature = this.signature();
+    if (signature !== this.lastSignature) {
+      this.lastSignature = signature;
+      this.dirty = true;
+    }
+    if (running || this.effects.busy || this.ctrl.tool.type === 'connect') this.dirty = true;
+    this.animate(now, dt, running);
+    if (this.dirty) {
+      this.dirty = false;
+      this.renderer.render(this.scene, this.camera);
+      this.labels.render(this.scene, this.camera);
+    }
     requestAnimationFrame(this.loop);
   };
 
+  /** Estado do controller que muda o que aparece na cena. */
+  private signature(): string {
+    const c = this.ctrl;
+    return `${c.graphVersion}|${c.level?.id}|${c.mode}|${c.paused}|${c.sim?.now ?? -1}|${c.selection?.id}|${c.tool.type}`;
+  }
+
   private resize() {
+    this.dirty = true;
     const w = this.container.clientWidth || 1;
     const h = this.container.clientHeight || 1;
     this.renderer.setSize(w, h);
@@ -349,13 +391,13 @@ export class SceneView {
 
   // ───────────── animação ─────────────
 
-  private animate(now: number, dt: number) {
+  private animate(now: number, dt: number, running: boolean) {
     const sim = this.ctrl.sim;
     const t = now / 1000;
 
     for (const v of this.nodeViews.values()) {
       for (const s of v.spinners) {
-        const busy = v.node.kind !== 'consumer' || this.consumerBusy(sim, v.node.id);
+        const busy = running && (v.node.kind !== 'consumer' || this.consumerBusy(sim, v.node.id));
         if (busy) s.rotation.z += dt * 0.002 * (v.node.kind === 'topic' ? 0.6 : 2);
       }
       const isWorkerNode = v.node.kind === 'consumer' || v.node.kind === 'lambda';
@@ -366,23 +408,23 @@ export class SceneView {
           if (!pad) return;
           const color =
             w.state === 'down'
-              ? '#ef4444'
+              ? PAD.down
               : w.state === 'processing' || w.state === 'receiving'
                 ? w.failReason === 'db'
-                  ? '#ef4444'
-                  : '#22c55e'
+                  ? PAD.down
+                  : PAD.busy
                 : w.state === 'polling'
-                  ? '#38bdf8'
+                  ? PAD.polling
                   : j >= c.active
-                    ? '#1e293b'
-                    : '#475569';
-          (pad.material as MeshStandardMaterial).color.set(color);
+                    ? PAD.off
+                    : PAD.idle;
+          (pad.material as MeshStandardMaterial).color.copy(color);
         });
         const mat = v.body.material as MeshStandardMaterial;
-        mat.color.set(c?.down ? '#7f1d1d' : v.baseColor);
+        mat.color.copy(c?.down ? DOWN_BODY : this.hex(v.baseColor));
       } else if (isWorkerNode) {
-        for (const pad of v.workerPads) (pad.material as MeshStandardMaterial).color.set(v.node.kind === 'lambda' ? '#1e293b' : '#475569');
-        (v.body.material as MeshStandardMaterial).color.set(v.baseColor);
+        for (const pad of v.workerPads) (pad.material as MeshStandardMaterial).color.copy(v.node.kind === 'lambda' ? PAD.off : PAD.idle);
+        (v.body.material as MeshStandardMaterial).color.copy(this.hex(v.baseColor));
       }
     }
 
@@ -439,10 +481,16 @@ export class SceneView {
     } else this.ghost.visible = false;
   }
 
+  private hex(value: string): Color {
+    let c = this.colors.get(value);
+    if (!c) this.colors.set(value, (c = new Color(value)));
+    return c;
+  }
+
   private tokenColor(token: Token): Color {
-    if (token.poison) return this.color.set(POISON_COLOR);
+    if (token.poison) return this.hex(POISON_COLOR);
     const g = this.ctrl.level?.highlightGroups ? groupColor(token.groupId) : null;
-    return this.color.set(g ?? typeInfo(token.type).color);
+    return this.hex(g ?? typeInfo(token.type).color);
   }
 
   private updateTokens(sim: Simulation | null) {
@@ -462,14 +510,13 @@ export class SceneView {
       d.scale.setScalar(scale);
       d.updateMatrix();
       this.tokens.setMatrixAt(i, d.matrix);
-      const c = this.tokenColor(token);
-      if (dim > 0) c.lerp(new Color('#334155'), dim);
+      const c = dim > 0 ? this.color.copy(this.tokenColor(token)).lerp(DIM_COLOR, dim) : this.tokenColor(token);
       this.tokens.setColorAt(i, c);
       i++;
     };
 
     // em trânsito
-    for (const tr of sim.transits) {
+    for (const tr of sim.transits()) {
       const key = tr.kind === 'dlq' ? `dlq:${tr.from}->${tr.to}` : `${tr.from}->${tr.to}`;
       const curve = this.curves.get(key);
       const p = Math.min(1, Math.max(0, (now - tr.start) / (tr.end - tr.start)));
@@ -490,11 +537,10 @@ export class SceneView {
       const view = this.nodeViews.get(q.id);
       if (!view) continue;
       let slot = 0;
-      for (const m of q.messages) {
-        if (m.inFlight) continue;
-        if (!queueSlot(view.node, slot++, this.tmp)) break;
-        put(this.tmp, m.token, 1, 0, m.visibleAt > now ? 0.6 : 0);
-      }
+      q.forEachWaiting((m) => {
+        if (!queueSlot(view.node, slot++, this.tmp)) return false;
+        put(this.tmp, m.token, 1, 0, m.state === 'delayed' ? 0.6 : 0);
+      });
     }
 
     // nos consumidores
@@ -508,7 +554,7 @@ export class SceneView {
         const current = w.batch[w.index];
         if (current) put(this.tmp, current.token, 1.05, now * 0.006);
         for (let k = w.index + 1; k < w.batch.length && k < w.index + 6; k++) {
-          const pos = this.tmp.clone();
+          const pos = this.tmp2.copy(this.tmp);
           pos.y += 0.2 + (k - w.index) * 0.2;
           put(pos, w.batch[k].token, 0.6);
         }
@@ -519,7 +565,7 @@ export class SceneView {
           d.scale.set(Math.max(0.01, prog * 0.4), 1, 1);
           d.updateMatrix();
           this.bars.setMatrixAt(b, d.matrix);
-          this.bars.setColorAt(b, this.color.set('#facc15'));
+          this.bars.setColorAt(b, BAR_COLOR);
           b++;
         }
       });
@@ -634,6 +680,7 @@ export class SceneView {
   }
 
   private onPointerDown = (e: PointerEvent) => {
+    this.dirty = true;
     if (e.button !== 0) return;
     this.updatePointer(e);
     const id = this.pickNode();
@@ -667,6 +714,7 @@ export class SceneView {
   };
 
   private onPointerMove = (e: PointerEvent) => {
+    this.dirty = true;
     this.updatePointer(e);
     this.hover = this.groundPoint();
     const el = this.renderer.domElement;
@@ -687,6 +735,7 @@ export class SceneView {
   };
 
   private onPointerUp = () => {
+    this.dirty = true;
     if (!this.drag) return;
     const { id, moved } = this.drag;
     this.drag = null;

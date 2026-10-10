@@ -178,3 +178,23 @@ export type SimEvent =
   | { t: number; type: 's3_put'; node: string; token: Token };
 
 export type SimEventType = SimEvent['type'];
+
+/** Eventos rotineiros: aparecem só no log detalhado ("mostrar tudo"). */
+export function isRoutine(e: SimEvent): boolean {
+  switch (e.type) {
+    case 'produced':
+      return !e.retry;
+    case 'received':
+      return e.receiveCount <= 1;
+    case 'published':
+    case 'filtered':
+    case 'enqueued':
+    case 'deleted':
+    case 'processed':
+    case 'empty_receive':
+    case 'visibility_extended':
+      return true;
+    default:
+      return false;
+  }
+}
