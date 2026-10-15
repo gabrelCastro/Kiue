@@ -1,0 +1,23 @@
+services:
+  kiue:
+    build: .
+    ports:
+      - "${PORT:-8787}:8787"
+    environment:
+      # URL pela qual o jogo é acessado (links de e-mail e proteção CSRF)
+      APP_URL: ${APP_URL:-http://localhost:8787}
+      # Cookie de sessão só por HTTPS (padrão). Chrome e Firefox aceitam em http://localhost;
+      # só desligue (false) para testar por IP na rede local ou no Safari, nunca em produção
+      SECURE_COOKIES: ${SECURE_COOKIES:-true}
+      # true quando houver proxy reverso (nginx, ALB) na frente
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      # Login com Google (opcional): credenciais OAuth do Google Cloud Console.
+      # URI de redirecionamento autorizada: ${APP_URL}/api/auth/google/callback
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-970791725385-355ksrhgk3p605pu1i6cjd8cavjti938.apps.googleusercontent.com}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-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}
+    volumes:
+      - kiue-data:/data
+    restart: unless-stopped
+
+volumes:
+  kiue-data:

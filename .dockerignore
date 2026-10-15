@@ -1,0 +1,10 @@
+node_modules
+dist
+data
+.git
+test-results
+playwright-report
+e2e/.auth
+HANDOFF.md
+.env
+.env.*

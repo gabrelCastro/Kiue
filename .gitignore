@@ -5,3 +5,7 @@ test-results
 playwright-report
 data
 e2e/.auth
+# segredos (credenciais do Google etc.): nunca no git
+.env
+.env.*
+!.env.example
