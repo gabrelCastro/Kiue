@@ -7,9 +7,16 @@ export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
-const badge = (text: string, cls = '') => `<span class="badge ${cls}">${text}</span>`;
+/**
+ * O rótulo vira `innerHTML`: todo valor que vem do grafo (nome, configuração, que pode chegar de um
+ * sandbox salvo) passa por `v()`, inclusive números, que num grafo adulterado podem ser texto.
+ */
+const v = (x: unknown): string => escapeHtml(String(x));
+const badge = (text: string, cls = '') => `<span class="badge ${cls}">${escapeHtml(text)}</span>`;
 
-function fmtSeconds(s: number): string {
+function fmtSeconds(raw: number): string {
+  const s = Number(raw);
+  if (!Number.isFinite(s)) return '?';
   if (s >= 86400) return `${+(s / 86400).toFixed(1)} d`;
   if (s >= 3600) return `${+(s / 3600).toFixed(1)} h`;
   if (s >= 60) return `${+(s / 60).toFixed(1)} min`;
@@ -30,7 +37,7 @@ export function describeNode(node: GraphNode, ctrl: Controller, sim: Simulation 
     case 'producer': {
       const cfg = (node as GraphNode<'producer'>).config;
       const p = sim?.producers.get(node.id);
-      lines.push(p ? `enviados ${p.emitted}/${cfg.total}` : `${cfg.rate}/s · ${cfg.total} pedidos`);
+      lines.push(p ? `enviados ${p.emitted}/${v(cfg.total)}` : `${v(cfg.rate)}/s · ${v(cfg.total)} pedidos`);
       if (cfg.groups > 0) badges.push(badge(`${cfg.groups} grupos`));
       if (cfg.poisonRate > 0) badges.push(badge('venenosas', 'bad'));
       if (cfg.retryRate > 0) badges.push(badge('retries', 'warn'));
@@ -74,16 +81,16 @@ export function describeNode(node: GraphNode, ctrl: Controller, sim: Simulation 
         const busy = c.workers.filter((w) => w.state === 'processing' || w.state === 'receiving').length;
         lines.push(c.down ? '<span class="down">fora do ar</span>' : `✓ <b>${done}</b> · ${busy}/${c.workers.length} ocupados`);
       } else {
-        const parts = [`${cfg.workers} worker${cfg.workers > 1 ? 's' : ''}`, `${cfg.processingTime}s/msg`];
-        if (cfg.batchSize > 1) parts.push(`lote ${cfg.batchSize}`);
-        parts.push(cfg.waitTime > 0 ? `long poll ${cfg.waitTime}s` : 'short poll');
+        const parts = [`${v(cfg.workers)} worker${cfg.workers > 1 ? 's' : ''}`, `${v(cfg.processingTime)}s/msg`];
+        if (cfg.batchSize > 1) parts.push(`lote ${v(cfg.batchSize)}`);
+        parts.push(cfg.waitTime > 0 ? `long poll ${v(cfg.waitTime)}s` : 'short poll');
         lines.push(parts.join(' · '));
       }
       if (cfg.httpOnly) badges.push(badge('HTTPS'));
       if (cfg.idempotent) badges.push(badge('idempotente', 'ok'));
       if (cfg.heartbeat) badges.push(badge('heartbeat', 'ok'));
-      if (cfg.interest) badges.push(badge(`só ${cfg.interest.join('/')}`));
-      if (cfg.outages.length) badges.push(badge('manutenção', 'warn'));
+      if (Array.isArray(cfg.interest)) badges.push(badge(`só ${cfg.interest.join('/')}`));
+      if (Array.isArray(cfg.outages) && cfg.outages.length) badges.push(badge('manutenção', 'warn'));
       break;
     }
     case 'lambda': {
@@ -97,7 +104,7 @@ export function describeNode(node: GraphNode, ctrl: Controller, sim: Simulation 
         const busy = c.workers.filter((w) => w.state === 'processing' || w.state === 'receiving').length;
         lines.push(`✓ <b>${done}</b> · ${busy} invocações · conc. ${c.active}/${c.workers.length}`);
       } else {
-        lines.push(`lote ${cfg.batchSize} · timeout ${cfg.timeout}s · conc. máx. ${cfg.maxConcurrency > 0 ? cfg.maxConcurrency : 'sem limite'}`);
+        lines.push(`lote ${v(cfg.batchSize)} · timeout ${v(cfg.timeout)}s · conc. máx. ${cfg.maxConcurrency > 0 ? v(cfg.maxConcurrency) : 'sem limite'}`);
       }
       break;
     }

@@ -1,9 +1,11 @@
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { timingSafeEqual } from 'node:crypto';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { secureHeaders } from 'hono/secure-headers';
 import { HttpError } from './errors';
 import { SlidingWindowLimiter, type RateLimiter } from './auth/rate-limit';
+import { HttpGoogleClient, newOAuthSecrets, type GoogleClient } from './auth/google';
 import { AuthService, type IssuedSession, type Limiters, type SessionInfo } from './auth/service';
 import type { Config } from './config';
 import type { Database } from './db';
@@ -11,7 +13,7 @@ import { LevelContent } from './game/levels';
 import { ProgressService } from './game/progress';
 import { SANDBOX_LIMITS, SandboxService } from './game/sandboxes';
 import type { Mailer } from './mail';
-import { SqliteProgressRepo, SqliteResetRepo, SqliteSandboxRepo, SqliteSessionRepo, SqliteUserRepo } from './repos';
+import { SqliteIdentityRepo, SqliteProgressRepo, SqliteResetRepo, SqliteSandboxRepo, SqliteSessionRepo, SqliteUserRepo } from './repos';
 
 const MINUTE = 60_000;
 
@@ -23,6 +25,8 @@ export interface AppDeps {
   clientIp?: (c: Context) => string;
   now?: () => number;
   limiters?: Partial<AppLimiters>;
+  /** Cliente do Google; por padrão sai das credenciais da configuração (ou fica desligado). */
+  google?: GoogleClient | null;
 }
 
 type Env = { Variables: { session: SessionInfo | null } };
@@ -50,6 +54,7 @@ export function createApp(deps: AppDeps) {
   const auth = new AuthService({
     config,
     users: new SqliteUserRepo(deps.db),
+    identities: new SqliteIdentityRepo(deps.db),
     sessions: new SqliteSessionRepo(deps.db),
     resets: new SqliteResetRepo(deps.db),
     mailer: deps.mailer,
@@ -59,8 +64,19 @@ export function createApp(deps: AppDeps) {
   const progress = new ProgressService(new SqliteProgressRepo(deps.db), now);
   const sandboxes = new SandboxService(new SqliteSandboxRepo(deps.db), now);
   const levels = new LevelContent();
+  const google: GoogleClient | null =
+    deps.google !== undefined
+      ? deps.google
+      : config.googleClientId && config.googleClientSecret
+        ? new HttpGoogleClient({
+            clientId: config.googleClientId,
+            clientSecret: config.googleClientSecret,
+            redirectUri: `${config.appUrl.replace(/\/$/, '')}/api/auth/google/callback`,
+          })
+        : null;
   // `__Host-` obriga Secure, Path=/ e nenhum Domain: o cookie não vaza para subdomínios
   const cookieName = config.secureCookies ? '__Host-kiue_session' : 'kiue_session';
+  const oauthCookie = config.secureCookies ? '__Host-kiue_oauth' : 'kiue_oauth';
   const clientIp = (c: Context): string => {
     if (config.trustProxy) {
       const forwarded = c.req.header('x-forwarded-for')?.split(',')[0]?.trim();
@@ -136,6 +152,54 @@ export function createApp(deps: AppDeps) {
   app.post('/auth/register', async (c) => issued(c, await auth.register(await body(c), ctx(c)), 201));
   app.post('/auth/login', async (c) => issued(c, await auth.login(await body(c), ctx(c)), 200));
 
+  // ───────────── login com Google ─────────────
+
+  app.get('/auth/google/start', (c) => {
+    if (!google) throw new HttpError('not_found', 'Login com Google indisponível.', 404);
+    const wait = limiters.loginByIp.retryAfter(clientIp(c));
+    const secrets = newOAuthSecrets();
+    // curto e só para a volta do Google (navegação de topo): Lax basta e Strict a perderia
+    setCookie(c, oauthCookie, `${secrets.state}.${secrets.nonce}.${secrets.verifier}`, {
+      httpOnly: true,
+      secure: config.secureCookies,
+      sameSite: 'Lax',
+      path: '/',
+      maxAge: 600,
+    });
+    if (wait > 0) return c.redirect(appRedirect('rate_limited'));
+    return c.redirect(google.authUrl(secrets));
+  });
+
+  const appRedirect = (error?: string) => `${config.appUrl.replace(/\/$/, '')}/${error ? `?auth_error=${error}` : ''}`;
+
+  app.get('/auth/google/callback', async (c) => {
+    const saved = getCookie(c, oauthCookie);
+    deleteCookie(c, oauthCookie, { path: '/', secure: config.secureCookies });
+    const fail = (code: string) => {
+      limiters.loginByIp.hit(clientIp(c));
+      return c.redirect(appRedirect(code));
+    };
+    if (!google) return c.redirect(appRedirect('google_failed'));
+    if (c.req.query('error')) return c.redirect(appRedirect('google_denied'));
+    const code = c.req.query('code');
+    const state = c.req.query('state');
+    const [savedState, nonce, verifier] = saved?.split('.') ?? [];
+    if (!code || !state || !savedState || !nonce || !verifier) return fail('google_failed');
+    const a = Buffer.from(state);
+    const b = Buffer.from(savedState);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return fail('google_failed');
+    const wait = limiters.loginByIp.retryAfter(clientIp(c));
+    if (wait > 0) return c.redirect(appRedirect('rate_limited'));
+    try {
+      const profile = await google.exchange({ code, verifier, nonce });
+      const session = auth.loginWithGoogle(profile, ctx(c));
+      setSessionCookie(c, session.token, session.expiresAt);
+      return c.redirect(appRedirect());
+    } catch (e) {
+      return fail(e instanceof HttpError ? e.code : 'google_failed');
+    }
+  });
+
   app.post('/auth/logout', (c) => {
     const s = c.get('session');
     if (s) auth.logout(s.sessionId);
@@ -144,7 +208,7 @@ export function createApp(deps: AppDeps) {
   });
 
   // estado da sessão sem erro para visitantes (a página pergunta isso em toda carga)
-  app.get('/auth/session', (c) => c.json({ user: c.get('session')?.user ?? null }));
+  app.get('/auth/session', (c) => c.json({ user: c.get('session')?.user ?? null, providers: { google: google !== null } }));
   app.get('/auth/me', (c) => c.json({ user: requireSession(c).user }));
 
   app.patch('/auth/me', async (c) => {

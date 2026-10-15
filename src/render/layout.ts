@@ -14,7 +14,9 @@ export const PORT_Y = 0.6;
 const PORT_DX = 0.8 * NODE_SCALE;
 /** Quantas mensagens por camada e quantas camadas cabem dentro da fila. */
 export const QUEUE_COLS = 9;
-export const QUEUE_LAYERS = 3;
+export const QUEUE_LAYERS = 4;
+/** Altura de um pacote (mensagem); as camadas na fila se empilham por ela. */
+export const TOKEN_H = 0.22;
 
 export function outPort(n: GraphNode): Vector3 {
   const dx = n.kind === 'queue' ? QUEUE_LEN / 2 : PORT_DX;
@@ -48,7 +50,8 @@ export function queueSlot(n: GraphNode, i: number, out: Vector3): boolean {
   const layer = Math.floor(i / QUEUE_COLS);
   if (layer >= QUEUE_LAYERS) return false;
   const col = i % QUEUE_COLS;
-  out.set(n.x + QUEUE_LEN / 2 - 0.3 - col * 0.36, LIFT + 0.2 + layer * 0.32, n.z);
+  // os pacotes assentam na esteira e se empilham de verdade (sem vão entre as camadas)
+  out.set(n.x + QUEUE_LEN / 2 - 0.3 - col * 0.36, LIFT + 0.065 + TOKEN_H / 2 + layer * (TOKEN_H + 0.02), n.z);
   return true;
 }
 

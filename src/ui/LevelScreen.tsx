@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { useCompact, useTouchUI } from './device';
 import { KIND_LABEL } from '../game/catalog';
 import { SPEEDS, type Controller } from '../game/controller';
 import type { GoalResult } from '../game/goals';
@@ -15,8 +16,11 @@ import { SandboxFile } from './SandboxFile';
 export function LevelScreen() {
   const ctrl = useController();
   const level = ctrl.level!;
+  const compact = useCompact();
   useKeyboard();
   useUnsavedGuard();
+
+  if (compact) return <CompactLevel />;
 
   return (
     <div class="level-screen">
@@ -30,6 +34,7 @@ export function LevelScreen() {
       <main class="stage">
         <SceneHost />
         <StageHint />
+        <TouchActions />
       </main>
       <aside class="right">
         <Inspector />
@@ -55,7 +60,11 @@ function SceneHost() {
       const view = new SceneView(ref.current!, ctrl);
       // gancho para testes e2e
       (window as unknown as { __kiue?: object }).__kiue = { ctrl, view, project: view.project.bind(view) };
-      dispose = () => view.dispose();
+      ctrl.recenterView = () => view.recenter();
+      dispose = () => {
+        ctrl.recenterView = () => {};
+        view.dispose();
+      };
     });
     return () => {
       disposed = true;
@@ -128,6 +137,7 @@ function TopBar() {
 
 function Palette() {
   const ctrl = useController();
+  const touch = useTouchUI();
   const level = ctrl.level!;
   const tool = ctrl.tool;
   return (
@@ -142,7 +152,7 @@ function Palette() {
               class={`palette-item kind-${item.kind} ${active ? 'active' : ''}`}
               disabled={!ctrl.canEdit || left <= 0}
               onClick={() => ctrl.setTool(active ? { type: 'select' } : { type: 'place', item })}
-              title={`${KIND_LABEL[item.kind]}: clique e depois clique no chão`}
+              title={`${KIND_LABEL[item.kind]}: ${touch ? 'toque e depois toque no chão' : 'clique e depois clique no chão'}`}
             >
               <span class={`kind-dot kind-${item.kind}`} />
               <span class="pi-label">{item.label}</span>
@@ -151,7 +161,8 @@ function Palette() {
           );
         })}
       </div>
-      {tool.type === 'place' && <p class="muted small">Clique no chão para colocar. <kbd>Esc</kbd> cancela.</p>}
+      {tool.type === 'place' &&
+        (touch ? <p class="muted small">Toque no chão para escolher o lugar.</p> : <p class="muted small">Clique no chão para colocar. <kbd>Esc</kbd> cancela.</p>)}
       {level.track === 'sandbox' && ctrl.access === 'guest' && (
         <p class="sandbox-limit small">
           Sandbox limitado para visitantes.{' '}
@@ -215,10 +226,12 @@ function ObjectiveCard() {
 
 function StageHint() {
   const ctrl = useController();
+  const touch = useTouchUI();
   const tool = ctrl.tool;
   let text: string | null = null;
-  if (tool.type === 'connect') text = 'Clique na peça de destino da conexão (Esc cancela).';
-  else if (tool.type === 'place') text = `Clique no chão para colocar: ${tool.item.label}.`;
+  if (tool.type === 'connect') text = touch ? 'Toque na peça de destino da conexão.' : 'Clique na peça de destino da conexão (Esc cancela).';
+  else if (tool.type === 'place')
+    text = touch ? `Toque no chão para escolher o lugar: ${tool.item.label}.` : `Clique no chão para colocar: ${tool.item.label}.`;
   else if (ctrl.mode === 'run' && ctrl.paused) text = 'Pausado.';
   const toast = ctrl.toast;
   return (
@@ -353,9 +366,13 @@ function useUnsavedGuard() {
   }, [unsaved]);
 }
 
+/** Espaço tocado rápido roda/pausa; segurado mais que isso é o modo de mover a câmera (ver scene.ts). */
+const SPACE_TAP_MS = 250;
+
 function useKeyboard() {
   const ctrl = useController();
   useEffect(() => {
+    let spaceDownAt: number | null = null;
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target.closest('input, select, textarea')) return;
@@ -366,12 +383,249 @@ function useKeyboard() {
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && ctrl.selection && ctrl.canEdit) {
         ctrl.deleteNode(ctrl.selection.id);
       } else if (e.key === ' ' && !target.closest('button')) {
+        // a decisão fica para o keyup: toque rápido roda/pausa, segurar move a câmera
         e.preventDefault();
-        if (ctrl.mode === 'build') ctrl.run();
-        else if (ctrl.mode === 'run') ctrl.togglePause();
+        if (!e.repeat) spaceDownAt = performance.now();
       }
     };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key !== ' ' || spaceDownAt === null) return;
+      const held = performance.now() - spaceDownAt;
+      spaceDownAt = null;
+      if (held >= SPACE_TAP_MS) return;
+      if (ctrl.mode === 'build') ctrl.run();
+      else if (ctrl.mode === 'run') ctrl.togglePause();
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKeyUp);
+    };
   }, [ctrl]);
+}
+
+// ───────────── celular e tablet: palco cheio, painéis numa gaveta ─────────────
+
+/** Ações do dedo no palco (o que Esc, Delete e o inspetor fazem no desktop) e o botão de recentralizar. */
+function TouchActions() {
+  const ctrl = useController();
+  const touch = useTouchUI();
+  const tool = ctrl.tool;
+  const node = ctrl.selectedNode;
+  let actions: preact.ComponentChildren = null;
+  // a barra de ações é do toque (no desktop, Esc/Del fazem o mesmo); o recentralizar é para todos
+  if (!touch) actions = null;
+  else if (tool.type === 'place') {
+    actions = (
+      <>
+        {ctrl.pendingPlace && (
+          <button class="btn primary" onClick={() => ctrl.confirmPlace()}>
+            ✓ Colocar aqui
+          </button>
+        )}
+        <button class="btn" onClick={() => ctrl.cancel()}>
+          ✕ Cancelar
+        </button>
+      </>
+    );
+  } else if (tool.type === 'connect') {
+    actions = (
+      <button class="btn" onClick={() => ctrl.cancel()}>
+        ✕ Cancelar
+      </button>
+    );
+  } else if (node && ctrl.canEdit) {
+    actions = (
+      <>
+        <button class="btn primary" onClick={() => ctrl.startConnect(node.id)}>
+          ⟶ Conectar
+        </button>
+        {!node.locked && (
+          <button class="btn danger" onClick={() => ctrl.deleteNode(node.id)}>
+            Excluir
+          </button>
+        )}
+        <button class="btn" onClick={() => ctrl.select(null)} aria-label="Fechar seleção">
+          ✕
+        </button>
+      </>
+    );
+  }
+  return (
+    <>
+      {actions && <div class="touch-actions">{actions}</div>}
+      <button class="btn recenter-btn" onClick={() => ctrl.recenterView()} aria-label="Recentralizar a câmera" title="Recentralizar">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="5" />
+          <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+        </svg>
+      </button>
+    </>
+  );
+}
+
+type SheetTab = 'montar' | 'missao' | 'metricas' | 'peca';
+type SheetSize = 'peek' | 'half' | 'full';
+
+function CompactLevel() {
+  const ctrl = useController();
+  const level = ctrl.level!;
+  return (
+    <div class="level-screen compact-level">
+      <CompactTopBar />
+      <main class="stage">
+        <SceneHost />
+        <StageHint />
+        <TouchActions />
+      </main>
+      <Sheet key={level.id} />
+      {ctrl.showBriefing && <Briefing />}
+      {ctrl.result && <ResultModal />}
+    </div>
+  );
+}
+
+function CompactTopBar() {
+  const ctrl = useController();
+  const level = ctrl.level!;
+  const running = ctrl.mode === 'run';
+  const [menu, setMenu] = useState(false);
+  const close = (fn: () => void) => () => {
+    setMenu(false);
+    fn();
+  };
+  return (
+    <header class="topbar compact">
+      <button class="btn ghost icon" onClick={() => confirmLeave(ctrl) && ctrl.openMenu()} aria-label="Voltar ao menu">
+        ←
+      </button>
+      <h1 title={level.title}>{level.title}</h1>
+      <div class="controls">
+        {ctrl.mode === 'build' ? (
+          <button class="btn run" onClick={() => ctrl.run()}>
+            ▶ Rodar
+          </button>
+        ) : (
+          <button class="btn" onClick={() => ctrl.toBuild()}>
+            ✎ Construir
+          </button>
+        )}
+        {running && (
+          <button class="btn icon" onClick={() => ctrl.togglePause()} aria-label={ctrl.paused ? 'Continuar' : 'Pausar'}>
+            {ctrl.paused ? '▶' : '❚❚'}
+          </button>
+        )}
+        <button
+          class="btn"
+          onClick={() => ctrl.setSpeed(SPEEDS[(SPEEDS.findIndex((x) => x === ctrl.speed) + 1) % SPEEDS.length]!)}
+          aria-label={`Velocidade ${ctrl.speed}×. Toque para mudar`}
+        >
+          {String(ctrl.speed).replace('.', ',')}×
+        </button>
+        <button class="btn ghost icon" onClick={() => setMenu(!menu)} aria-label="Mais opções" aria-expanded={menu}>
+          ⋯
+        </button>
+      </div>
+      {menu && (
+        <>
+          <button class="menu-scrim" aria-label="Fechar menu" onClick={() => setMenu(false)} />
+          <div class="more-menu" role="menu">
+            {level.track !== 'sandbox' && <button class="btn ghost" onClick={close(() => ctrl.setBriefing(true))}>Briefing</button>}
+            <button class="btn ghost" disabled={!running} onClick={close(() => ctrl.finishNow())}>
+              » Concluir agora
+            </button>
+            <button class="btn ghost" onClick={close(() => ctrl.resetGraph())}>
+              Reiniciar a fase
+            </button>
+            {level.track !== 'sandbox' && ctrl.attempts > 0 && (
+              <button class="btn ghost" onClick={close(() => ctrl.showSolution())}>
+                Ver solução
+              </button>
+            )}
+            <button class="btn ghost" onClick={close(() => ctrl.setGlossary(true))}>
+              Glossário
+            </button>
+            <div class="more-account" onClick={() => setMenu(false)}>
+              <AccountButton />
+            </div>
+          </div>
+        </>
+      )}
+    </header>
+  );
+}
+
+/** Gaveta com os painéis da fase: embaixo (em pé) ou à direita (deitado). O palco encolhe junto. */
+function Sheet() {
+  const ctrl = useController();
+  const level = ctrl.level!;
+  const hasPalette = level.palette.length > 0;
+  const [tab, setTab] = useState<SheetTab>(hasPalette ? 'montar' : 'missao');
+  const [size, setSize] = useState<SheetSize>('peek');
+  const selectedId = ctrl.selection?.id ?? null;
+  const toolType = ctrl.tool.type;
+
+  // selecionar uma peça abre o inspetor; escolher peça ou conexão recolhe para liberar o palco
+  useEffect(() => {
+    if (selectedId) {
+      setTab('peca');
+      setSize((s) => (s === 'peek' ? 'half' : s));
+    } else setTab((t) => (t === 'peca' ? (hasPalette ? 'montar' : 'missao') : t));
+  }, [selectedId, hasPalette]);
+  useEffect(() => {
+    if (toolType !== 'select') setSize('peek');
+  }, [toolType]);
+
+  const tabs: { id: SheetTab; label: string }[] = [
+    ...(hasPalette ? [{ id: 'montar' as const, label: 'Peças' }] : []),
+    { id: 'missao', label: 'Missão' },
+    { id: 'metricas', label: 'Métricas' },
+    ...(selectedId ? [{ id: 'peca' as const, label: 'Peça' }] : []),
+  ];
+  const pick = (id: SheetTab) => {
+    if (id === tab && size !== 'peek') setSize('peek');
+    else {
+      setTab(id);
+      if (size === 'peek') setSize('half');
+    }
+  };
+
+  return (
+    <aside class={`sheet sheet-${size}`}>
+      <div class="sheet-bar" role="tablist">
+        {tabs.map((t) => (
+          <button key={t.id} role="tab" aria-selected={tab === t.id && size !== 'peek'} class={tab === t.id && size !== 'peek' ? 'active' : ''} onClick={() => pick(t.id)}>
+            {t.label}
+          </button>
+        ))}
+        <button class="sheet-grow" aria-label={size === 'full' ? 'Reduzir painel' : 'Ampliar painel'} onClick={() => setSize(size === 'full' ? 'half' : 'full')}>
+          {size === 'full' ? '⌄' : '⌃'}
+        </button>
+      </div>
+      {size !== 'peek' && (
+        <div class="sheet-body">
+          {tab === 'montar' && (
+            <>
+              {level.track === 'sandbox' && <SandboxFile />}
+              <Palette />
+            </>
+          )}
+          {tab === 'missao' && (
+            <>
+              {level.goals.length > 0 && <Goals />}
+              <ObjectiveCard />
+            </>
+          )}
+          {tab === 'metricas' && (
+            <>
+              <Metrics />
+              <EventLog />
+            </>
+          )}
+          {tab === 'peca' && <Inspector />}
+        </div>
+      )}
+    </aside>
+  );
 }

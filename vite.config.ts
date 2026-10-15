@@ -1,11 +1,12 @@
 import { defineConfig } from 'vitest/config';
 import preact from '@preact/preset-vite';
+import { pwa } from './scripts/vite-pwa';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:8787';
 
 export default defineConfig({
   base: './',
-  plugins: [preact()],
+  plugins: [preact(), pwa()],
   build: { chunkSizeWarningLimit: 900 },
   // a API (server/) roda à parte em desenvolvimento; o navegador vê tudo no mesmo domínio
   // porta fixa: a API só aceita escrita vinda da origem configurada (APP_URL, padrão :5173)

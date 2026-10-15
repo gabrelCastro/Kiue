@@ -33,8 +33,11 @@ export interface SandboxRef {
 }
 
 export const SPEEDS = [0.5, 1, 2, 4, 8] as const;
-const GRID_LIMIT_X = 12;
-const GRID_LIMIT_Z = 8;
+/**
+ * Até onde dá para montar, em cada eixo, a partir do centro. O chão é infinito na tela; este
+ * limite é o mesmo que o servidor aceita ao salvar sandboxes (COORD_MAX em server/src/game).
+ */
+export const BUILD_LIMIT = 100;
 
 const DEFAULTS: { [K in NodeKind]: () => ConfigByKind[K] } = {
   producer: () => defaultProducer(),
@@ -55,6 +58,10 @@ export class Controller {
   speed: number = 2;
   paused = false;
   tool: Tool = { type: 'select' };
+  /** No toque, o primeiro toque no chão só marca o lugar; a peça entra em `confirmPlace`. */
+  pendingPlace: { x: number; z: number } | null = null;
+  /** A cena registra aqui como voltar ao enquadramento automático da câmera. */
+  recenterView: () => void = () => {};
   selection: Selection = null;
   sim: Simulation | null = null;
   /** Indica que a simulação está rodando em tempo real (efeitos visuais ligados). */
@@ -328,7 +335,28 @@ export class Controller {
       return;
     }
     this.tool = tool;
+    this.pendingPlace = null;
     this.notify();
+  }
+
+  /** Marca onde a peça escolhida vai entrar (toque); só vale dentro da área e sem sobrepor outra peça. */
+  setPendingPlace(pos: { x: number; z: number } | null): void {
+    this.pendingPlace = this.tool.type === 'place' ? pos : null;
+    this.notify();
+  }
+
+  confirmPlace(): void {
+    const p = this.pendingPlace;
+    if (!p) return;
+    this.pendingPlace = null;
+    this.placeAt(p.x, p.z);
+    this.notify();
+  }
+
+  /** Sai da ferramenta atual (colocar/conectar) ou, sem ferramenta, limpa a seleção: o Esc do toque. */
+  cancel(): void {
+    if (this.tool.type !== 'select') this.setTool({ type: 'select' });
+    else this.select(null);
   }
 
   select(sel: Selection): void {
@@ -342,7 +370,7 @@ export class Controller {
   }
 
   private positionError(kind: NodeKind, x: number, z: number, ignoreId?: string): string | null {
-    if (Math.abs(x) > GRID_LIMIT_X || Math.abs(z) > GRID_LIMIT_Z) return 'Fora da área de construção.';
+    if (Math.abs(x) > BUILD_LIMIT || Math.abs(z) > BUILD_LIMIT) return 'Fora da área de construção.';
     const close = this.graph.nodes.some((n) => n.id !== ignoreId && footprintsOverlap(kind, x, z, n.kind, n.x, n.z));
     return close ? 'Muito perto de outra peça.' : null;
   }

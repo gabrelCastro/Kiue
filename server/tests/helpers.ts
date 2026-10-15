@@ -1,4 +1,5 @@
 import { createApp } from '../src/app';
+import type { GoogleClient, GoogleProfile } from '../src/auth/google';
 import { loadConfig, type Config } from '../src/config';
 import { openDatabase } from '../src/db';
 import { MemoryMailer } from '../src/mail';
@@ -6,13 +7,26 @@ import { MemoryMailer } from '../src/mail';
 export const ORIGIN = 'http://localhost:5173';
 
 /** Servidor de teste: banco em memória, relógio controlável, e-mails guardados. */
-export function setup(overrides: Partial<Config> = {}) {
+/** Google de mentira: o "código" do callback é uma chave para o perfil devolvido. */
+export class FakeGoogle implements GoogleClient {
+  profiles = new Map<string, GoogleProfile>();
+  authUrl({ state }: { state: string; nonce: string; challenge: string }): string {
+    return `https://accounts.google.com/o/oauth2/v2/auth?state=${state}`;
+  }
+  async exchange({ code }: { code: string }): Promise<GoogleProfile> {
+    const p = this.profiles.get(code);
+    if (!p) throw new Error('código inválido');
+    return p;
+  }
+}
+
+export function setup(overrides: Partial<Config> = {}, google: GoogleClient | null = null) {
   const config: Config = { ...loadConfig({ NODE_ENV: 'test' }), databasePath: ':memory:', scryptCost: 10, ...overrides };
   const db = openDatabase(':memory:');
   const mailer = new MemoryMailer();
   const clock = { t: Date.UTC(2026, 9, 1) };
   let ip = '203.0.113.1';
-  const { app, auth } = createApp({ config, db, mailer, now: () => clock.t, clientIp: () => ip });
+  const { app, auth } = createApp({ config, db, mailer, now: () => clock.t, clientIp: () => ip, google });
   return {
     app,
     auth,

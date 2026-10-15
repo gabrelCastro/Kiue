@@ -1,11 +1,12 @@
 import type { Config } from '../config';
 import type { Mailer } from '../mail';
-import { EmailTakenError, type ResetRepo, type SessionRepo, type UserRecord, type UserRepo } from '../repos';
+import type { GoogleProfile } from './google';
+import { EmailTakenError, type IdentityRepo, type ResetRepo, type SessionRepo, type UserRecord, type UserRepo } from '../repos';
 import { HttpError } from '../errors';
 import { hashPassword, needsRehash, verifyPassword } from './password';
 import type { RateLimiter } from './rate-limit';
 import { hashToken, newId, newToken } from './tokens';
-import { normalizeEmail, passwordInput, tokenInput, validateName, validateNewPassword } from './validation';
+import { NAME_MAX, normalizeEmail, passwordInput, tokenInput, validateName, validateNewPassword } from './validation';
 
 const DAY = 86_400_000;
 const MINUTE = 60_000;
@@ -18,6 +19,10 @@ export interface PublicUser {
   email: string;
   name: string;
   createdAt: number;
+  /** Tem senha própria (conta só-Google não tem). */
+  hasPassword: boolean;
+  /** Conta vinculada ao Google. */
+  google: boolean;
 }
 
 export interface SessionInfo {
@@ -47,6 +52,7 @@ export interface Limiters {
 export interface AuthDeps {
   config: Config;
   users: UserRepo;
+  identities: IdentityRepo;
   sessions: SessionRepo;
   resets: ResetRepo;
   mailer: Mailer;
@@ -54,7 +60,14 @@ export interface AuthDeps {
   now?: () => number;
 }
 
-export const toPublic = (u: UserRecord): PublicUser => ({ id: u.id, email: u.email, name: u.name, createdAt: u.createdAt });
+export const toPublic = (u: UserRecord, google = false): PublicUser => ({
+  id: u.id,
+  email: u.email,
+  name: u.name,
+  createdAt: u.createdAt,
+  hasPassword: u.passwordHash !== '',
+  google,
+});
 
 export class AuthService {
   private readonly now: () => number;
@@ -108,6 +121,47 @@ export class AuthService {
     return this.issueSession(user, ctx.userAgent);
   }
 
+  // ───────────── login com Google ─────────────
+
+  /**
+   * Entra (ou cria/vincula) a conta do perfil do Google, sempre exigindo e-mail verificado:
+   *  1. identidade já vinculada → entra nessa conta (mesmo que o e-mail tenha mudado);
+   *  2. e-mail igual ao de uma conta existente → vincula automaticamente;
+   *  3. senão → cria uma conta nova, sem senha.
+   *
+   * Como o cadastro por senha não confirma o e-mail, quem pré-cadastrou o e-mail de outra pessoa
+   * ficaria com a senha dela depois da vinculação. Por isso, ao vincular uma conta com senha, a
+   * senha é anulada e as sessões abertas caem; quem for o dono volta com o Google (ou "esqueci a senha").
+   */
+  loginWithGoogle(profile: GoogleProfile, ctx: { userAgent: string | null }): IssuedSession {
+    if (!profile.emailVerified) throw new HttpError('google_unverified', 'O Google não confirmou o e-mail desta conta.', 403);
+    const { users, identities, sessions, resets } = this.deps;
+    const now = this.now();
+    const email = normalizeEmail(profile.email);
+
+    const linkedId = identities.findUserId('google', profile.sub);
+    if (linkedId) {
+      const linked = users.findById(linkedId);
+      if (linked) return this.issueSession(linked, ctx.userAgent);
+    }
+
+    const existing = users.findByEmail(email);
+    if (existing) {
+      identities.insert('google', profile.sub, existing.id, now);
+      if (existing.passwordHash !== '') {
+        users.updatePassword(existing.id, '', now);
+        sessions.deleteByUser(existing.id);
+        resets.invalidateByUser(existing.id, now);
+      }
+      return this.issueSession(users.findById(existing.id)!, ctx.userAgent);
+    }
+
+    const user: UserRecord = { id: newId(), email, name: googleName(profile.name, email), passwordHash: '', createdAt: now, updatedAt: now };
+    users.insert(user);
+    identities.insert('google', profile.sub, user.id, now);
+    return this.issueSession(user, ctx.userAgent);
+  }
+
   // ───────────── sessão ─────────────
 
   /** Resolve o cookie numa sessão válida (ou `null`), renovando o prazo de inatividade. */
@@ -123,7 +177,7 @@ export class AuthService {
     }
     const user = this.deps.users.findById(session.userId);
     if (!user) return null;
-    const info: SessionInfo = { user: toPublic(user), sessionId: id };
+    const info: SessionInfo = { user: this.publicUser(user), sessionId: id };
     if (now - session.lastSeenAt >= TOUCH_INTERVAL) {
       const cap = session.createdAt + this.deps.config.sessionMaxDays * DAY;
       const expiresAt = Math.min(now + this.deps.config.sessionIdleDays * DAY, cap);
@@ -147,7 +201,7 @@ export class AuthService {
   updateProfile(userId: string, input: { name?: unknown }): PublicUser {
     const name = validateName(input.name);
     this.deps.users.updateName(userId, name, this.now());
-    return toPublic(this.deps.users.findById(userId)!);
+    return this.publicUser(this.deps.users.findById(userId)!);
   }
 
   /** Troca a senha sabendo a atual; derruba as outras sessões (quem roubou a senha antiga sai). */
@@ -165,10 +219,15 @@ export class AuthService {
     this.deps.resets.invalidateByUser(userId, this.now());
   }
 
-  async deleteAccount(userId: string, input: { password?: unknown }): Promise<void> {
-    const password = passwordInput(input.password);
+  /** Com senha, confirma pela senha; conta só-Google confirma digitando o próprio e-mail. */
+  async deleteAccount(userId: string, input: { password?: unknown; email?: unknown }): Promise<void> {
     const user = this.deps.users.findById(userId)!;
-    if (!(await verifyPassword(password, user.passwordHash))) throw new HttpError('invalid_credentials', 'Senha incorreta.', 401, 'password');
+    if (user.passwordHash === '') {
+      if (normalizeEmail(input.email) !== user.email) throw new HttpError('invalid_credentials', 'O e-mail não confere com o da conta.', 400, 'email');
+    } else {
+      const password = passwordInput(input.password);
+      if (!(await verifyPassword(password, user.passwordHash))) throw new HttpError('invalid_credentials', 'Senha incorreta.', 401, 'password');
+    }
     this.deps.users.delete(userId); // sessões e links caem junto (ON DELETE CASCADE)
   }
 
@@ -237,11 +296,21 @@ export class AuthService {
     const token = newToken();
     const expiresAt = now + this.deps.config.sessionIdleDays * DAY;
     this.deps.sessions.insert({ id: hashToken(token), userId: user.id, createdAt: now, expiresAt, lastSeenAt: now, userAgent: userAgent?.slice(0, 200) ?? null });
-    return { user: toPublic(user), token, expiresAt };
+    return { user: this.publicUser(user), token, expiresAt };
+  }
+
+  private publicUser(user: UserRecord): PublicUser {
+    return toPublic(user, this.deps.identities.hasProvider(user.id, 'google'));
   }
 
   private guard(limiter: RateLimiter, key: string, message: string): void {
     const wait = limiter.retryAfter(key);
     if (wait > 0) throw new HttpError('rate_limited', message, 429, undefined, wait);
   }
+}
+
+/** Nome do perfil do Google dentro dos limites do jogo; sem nome, usa o começo do e-mail. */
+function googleName(raw: string, email: string): string {
+  const name = raw.trim().replace(/\s+/g, ' ').slice(0, NAME_MAX);
+  return name || email.split('@')[0]!.slice(0, NAME_MAX);
 }

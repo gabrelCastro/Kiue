@@ -11,17 +11,16 @@ import {
   LineSegments,
   Mesh,
   MeshBasicMaterial,
-  MeshPhysicalMaterial,
-  MeshStandardMaterial,
   PlaneGeometry,
   TorusGeometry,
   type Object3D,
-  type Texture,
 } from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { lambdaCap } from '../sim/engine';
 import type { GraphNode } from '../sim/types';
+import { bakedMaterial, bakeTree } from './bake';
+import { beltTexture, contactShadowTexture } from './textures';
 import { LAMBDA_RING, LIFT, NODE_SCALE, QUEUE_DEPTH, QUEUE_HEIGHT, QUEUE_LEN } from './layout';
 
 export const NODE_COLORS = {
@@ -61,23 +60,12 @@ export interface NodeView {
 }
 
 /**
- * Reflexo de ambiente só nas peças. Como `scene.environment` ele valeria também para o chão, que
- * cobre a tela toda: o custo por pixel dobrava o frame.
+ * Material das peças: luz assada nos vértices (ver bake.ts). `emissive` (janela acesa, LED) vira
+ * cor pura, sem sombreado; os demais campos de material físico antigos são ignorados.
  */
-let environment: Texture | null = null;
-export function setNodeEnvironment(tex: Texture | null): void {
-  environment = tex;
-}
-const ENV_INTENSITY = 0.5;
-
-function mat(color: string, extra: Partial<ConstructorParameters<typeof MeshStandardMaterial>[0]> = {}) {
-  return new MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.1, envMap: environment, envMapIntensity: ENV_INTENSITY, ...extra });
-}
-
-function shadowed<T extends Mesh>(m: T): T {
-  m.castShadow = true;
-  m.receiveShadow = true;
-  return m;
+function mat(color: string, extra: { flatShading?: boolean; emissive?: string; emissiveIntensity?: number; roughness?: number; metalness?: number } = {}) {
+  if (extra.emissive) return new MeshBasicMaterial({ color });
+  return bakedMaterial(color, { flat: extra.flatShading });
 }
 
 function rounded(w: number, h: number, d: number, radius = 0.1) {
@@ -89,6 +77,19 @@ function shade(color: string, amount: number, toward = '#ffffff'): string {
   return `#${new Color(color).lerp(new Color(toward), amount).getHexString()}`;
 }
 
+/** Mancha de sombra suave sob a peça: assenta o modelo no chão sem custo de luz. */
+function contactShadow(group: Group, w: number, d: number): void {
+  const blob = new Mesh(
+    new PlaneGeometry(w * 1.6, d * 1.6),
+    new MeshBasicMaterial({ map: contactShadowTexture(), transparent: true, depthWrite: false }),
+  );
+  blob.rotation.x = -Math.PI / 2;
+  // deslocada para longe da luz (que vem da esquerda e da frente): faz o papel da sombra projetada
+  blob.position.set(w * 0.16, 0.004, -d * 0.12);
+  blob.renderOrder = -1;
+  group.add(blob);
+}
+
 /**
  * Base de "peça de tabuleiro": uma placa clara na cor do serviço, com um filete mais forte em
  * volta. Dá unidade visual entre as peças e destaca cada uma do chão, sem brilho.
@@ -96,7 +97,7 @@ function shade(color: string, amount: number, toward = '#ffffff'): string {
 function pedestal(group: Group, w: number, d: number, color: string): Mesh {
   const glow = new Mesh(rounded(w + 0.08, 0.03, d + 0.08, 0.06), new MeshBasicMaterial({ color: shade(color, 0.35) }));
   glow.position.y = 0.015;
-  const base = shadowed(new Mesh(rounded(w, 0.14, d, 0.07), mat(shade(color, 0.86), { roughness: 0.8, metalness: 0 })));
+  const base = new Mesh(rounded(w, 0.14, d, 0.07), mat(shade(color, 0.86), { roughness: 0.8, metalness: 0 }));
   base.position.y = 0.09;
   group.add(glow, base);
   return base;
@@ -120,13 +121,14 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
   switch (node.kind) {
     case 'producer': {
       baseColor = '#aab7b8';
+      contactShadow(model, 1.6, 1.5);
       const base = pedestal(model, 1.6, 1.5, NODE_COLORS.producer);
-      body = shadowed(new Mesh(rounded(1.3, 0.85, 1.2, 0.08), mat(baseColor)));
+      body = new Mesh(rounded(1.3, 0.85, 1.2, 0.08), mat(baseColor));
       body.position.y = lift + 0.425;
-      const roof = shadowed(new Mesh(new ConeGeometry(1.0, 0.55, 4), mat(NODE_COLORS.producer, { flatShading: true })));
+      const roof = new Mesh(new ConeGeometry(1.0, 0.55, 4), mat(NODE_COLORS.producer, { flatShading: true }));
       roof.position.y = lift + 1.12;
       roof.rotation.y = Math.PI / 4;
-      const chimney = shadowed(new Mesh(rounded(0.2, 0.5, 0.2, 0.04), mat('#414d5c')));
+      const chimney = new Mesh(rounded(0.2, 0.5, 0.2, 0.04), mat('#414d5c'));
       chimney.position.set(0.38, lift + 1.2, -0.25);
       // fachada voltada para a câmera (+z): porta e janelas acesas
       const door = new Mesh(new PlaneGeometry(0.3, 0.45), mat('#414d5c'));
@@ -143,12 +145,13 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
     }
     case 'topic': {
       baseColor = NODE_COLORS.topic;
-      const base = shadowed(new Mesh(new CylinderGeometry(0.72, 0.85, 0.22, 32), mat(shade(NODE_COLORS.topic, 0.86), { roughness: 0.8, metalness: 0 })));
+      contactShadow(model, 1.7, 1.7);
+      const base = new Mesh(new CylinderGeometry(0.72, 0.85, 0.22, 32), mat(shade(NODE_COLORS.topic, 0.86), { roughness: 0.8, metalness: 0 }));
       base.position.y = 0.11;
       const glow = new Mesh(new TorusGeometry(0.8, 0.02, 8, 64), new MeshBasicMaterial({ color: shade(NODE_COLORS.topic, 0.35) }));
       glow.rotation.x = Math.PI / 2;
       glow.position.y = 0.22;
-      body = shadowed(new Mesh(new IcosahedronGeometry(0.55, 1), mat(baseColor, { flatShading: true })));
+      body = new Mesh(new IcosahedronGeometry(0.55, 1), mat(baseColor, { flatShading: true }));
       body.position.y = 0.88;
       const ring = new Mesh(new TorusGeometry(0.85, 0.025, 8, 48), mat(shade(NODE_COLORS.topic, 0.55)));
       ring.position.y = 0.88;
@@ -165,21 +168,33 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
       baseColor = isDlq ? NODE_COLORS.dlq : NODE_COLORS.queue;
       const fifo = (node as GraphNode<'queue'>).config.fifo;
       const solid = mat(baseColor);
-      // piso claro: a fila lê como um recipiente (e as mensagens contrastam com ele)
-      const floorMat = mat(shade(baseColor, 0.7), { roughness: 0.8, metalness: 0 });
+      contactShadow(model, QUEUE_LEN + 0.3, QUEUE_DEPTH + 0.3);
       pedestal(model, QUEUE_LEN + 0.3, QUEUE_DEPTH + 0.3, baseColor);
       // tubo de vidro: transparente para mostrar as mensagens, com reflexo do ambiente
-      body = new Mesh(
-        new BoxGeometry(QUEUE_LEN, QUEUE_HEIGHT, QUEUE_DEPTH),
-        new MeshPhysicalMaterial({ color: baseColor, envMap: environment, envMapIntensity: ENV_INTENSITY, transparent: true, opacity: 0.14, roughness: 0.08, metalness: 0, clearcoat: 1, depthWrite: false }),
-      );
+      body = new Mesh(new BoxGeometry(QUEUE_LEN, QUEUE_HEIGHT, QUEUE_DEPTH), new MeshBasicMaterial({ color: baseColor, transparent: true, opacity: 0.13, depthWrite: false }));
       body.position.y = lift + QUEUE_HEIGHT / 2;
       body.renderOrder = 2;
       const edges = new LineSegments(new EdgesGeometry(body.geometry), new LineBasicMaterial({ color: shade(baseColor, 0.1), transparent: true, opacity: 0.6 }));
       edges.position.copy(body.position);
-      const floor = shadowed(new Mesh(rounded(QUEUE_LEN, 0.06, QUEUE_DEPTH, 0.03), floorMat));
+      // esteira: as mensagens esperam em cima dela e ela rola para a cabeça da fila (à direita)
+      const floor = new Mesh(rounded(QUEUE_LEN, 0.06, QUEUE_DEPTH, 0.03), mat('#2b3036', { roughness: 0.9, metalness: 0 }));
       floor.position.y = lift + 0.03;
-      const capL = shadowed(new Mesh(rounded(0.14, QUEUE_HEIGHT + 0.1, QUEUE_DEPTH + 0.12, 0.05), solid));
+      const beltTex = beltTexture();
+      beltTex.repeat.set(QUEUE_LEN * 1.4, 1);
+      const beltMat = bakedMaterial('#ffffff');
+      beltMat.map = beltTex;
+      const belt = new Mesh(new PlaneGeometry(QUEUE_LEN - 0.1, QUEUE_DEPTH - 0.16), beltMat);
+      belt.rotation.x = -Math.PI / 2;
+      belt.position.y = lift + 0.062;
+      // roletes nas pontas da esteira
+      for (const x of [-QUEUE_LEN / 2 + 0.16, QUEUE_LEN / 2 - 0.16]) {
+        const roller = new Mesh(new CylinderGeometry(0.06, 0.06, QUEUE_DEPTH - 0.1, 16), mat('#8a929b', { metalness: 0.5, roughness: 0.35 }));
+        roller.rotation.x = Math.PI / 2;
+        roller.position.set(x, lift + 0.06, 0);
+        model.add(roller);
+      }
+      model.add(belt);
+      const capL = new Mesh(rounded(0.14, QUEUE_HEIGHT + 0.1, QUEUE_DEPTH + 0.12, 0.05), solid);
       capL.position.set(-QUEUE_LEN / 2, lift + QUEUE_HEIGHT / 2 + 0.05, 0);
       const capR = capL.clone();
       capR.position.x = QUEUE_LEN / 2;
@@ -198,8 +213,9 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
     }
     case 'consumer': {
       baseColor = NODE_COLORS.consumer;
+      contactShadow(model, 1.7, 1.6);
       const base = pedestal(model, 1.7, 1.6, baseColor);
-      body = shadowed(new Mesh(rounded(1.5, 0.78, 1.4, 0.1), mat(baseColor)));
+      body = new Mesh(rounded(1.5, 0.78, 1.4, 0.1), mat(baseColor));
       body.position.y = lift + 0.39;
       // fachada de servidor: frestas de ventilação e a engrenagem que gira enquanto processa
       const ventMat = mat(shade(baseColor, 0.45, '#0f141a'));
@@ -230,15 +246,16 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
     }
     case 'lambda': {
       baseColor = NODE_COLORS.lambda;
-      const base = shadowed(new Mesh(new CylinderGeometry(0.98, 1.02, 0.14, 6), mat(shade(baseColor, 0.86), { flatShading: true, roughness: 0.8, metalness: 0 })));
+      contactShadow(model, 2.0, 2.0);
+      const base = new Mesh(new CylinderGeometry(0.98, 1.02, 0.14, 6), mat(shade(baseColor, 0.86), { flatShading: true, roughness: 0.8, metalness: 0 }));
       base.position.y = 0.09;
       const glow = new Mesh(new CylinderGeometry(1.04, 1.04, 0.03, 6), new MeshBasicMaterial({ color: shade(baseColor, 0.35) }));
       glow.position.y = 0.02;
-      body = shadowed(new Mesh(new CylinderGeometry(0.75, 0.8, 0.75, 6), mat(baseColor, { flatShading: true })));
+      body = new Mesh(new CylinderGeometry(0.75, 0.8, 0.75, 6), mat(baseColor, { flatShading: true }));
       body.position.y = lift + 0.375;
       const top = new Mesh(new CylinderGeometry(0.62, 0.75, 0.08, 6), mat(shade(baseColor, 0.3), { flatShading: true }));
       top.position.y = lift + 0.79;
-      const glyph = new Mesh(new PlaneGeometry(0.85, 0.85), new MeshStandardMaterial({ map: lambdaGlyph(), transparent: true, depthWrite: false }));
+      const glyph = new Mesh(new PlaneGeometry(0.85, 0.85), new MeshBasicMaterial({ map: lambdaGlyph(), transparent: true, depthWrite: false }));
       glyph.rotation.x = -Math.PI / 2;
       glyph.position.y = lift + 0.84;
       model.add(glow, base, body, top, glyph);
@@ -265,5 +282,6 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
   labelObj.center.set(0.5, 1);
   model.add(labelObj);
 
+  bakeTree(group);
   return { node, group, pickables, label, spinners, workerPads, body: body!, baseColor: baseColor! };
 }

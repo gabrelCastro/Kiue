@@ -1,4 +1,4 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: 'e2e',
@@ -9,6 +9,12 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: { baseURL: 'http://localhost:4317', viewport: { width: 1440, height: 900 } },
+  // desktop roda tudo, menos o mobile.spec; os projetos de celular rodam só o mobile.spec
+  projects: [
+    { name: 'desktop', testIgnore: /mobile\.spec/ },
+    { name: 'mobile', testMatch: /mobile\.spec/, use: { ...devices['Pixel 7'] } },
+    { name: 'mobile-landscape', testMatch: /mobile\.spec/, use: { ...devices['Pixel 7 landscape'] } },
+  ],
   webServer: [
     {
       // API de teste: banco em memória, some ao fim da execução

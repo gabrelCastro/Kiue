@@ -28,8 +28,8 @@ export function Inspector() {
         <p class="muted">Clique numa peça para ver e mudar a configuração dela.</p>
         <ul class="tips">
           <li><b>Clique</b> numa peça para selecionar; <b>arraste</b> para mover.</li>
-          <li><b>Botão direito</b> ou do meio arrasta a câmera; a <b>roda</b> dá zoom.</li>
-          <li><kbd>Esc</kbd> cancela, <kbd>Del</kbd> remove, <kbd>Espaço</kbd> roda/pausa.</li>
+          <li><b>Segure <kbd>Espaço</kbd></b> e arraste (ou use o botão direito) para mover a câmera; a <b>roda</b> dá zoom.</li>
+          <li><kbd>Esc</kbd> cancela, <kbd>Del</kbd> remove, toque em <kbd>Espaço</kbd> roda/pausa.</li>
         </ul>
       </div>
     );

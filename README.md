@@ -124,6 +124,20 @@ server/src/mail.ts           envio de e-mail (console em desenvolvimento)
 
 Variáveis de ambiente (todas opcionais): `PORT` (8787), `DATABASE_PATH` (`data/kiue.db`), `APP_URL` (URL pública do jogo, usada nos links e como origem permitida), `ALLOWED_ORIGINS`, `SECURE_COOKIES`, `TRUST_PROXY` (atrás de proxy/CDN), `SESSION_IDLE_DAYS`, `SESSION_MAX_DAYS`, `RESET_TOKEN_MINUTES`, `SCRYPT_COST`, `STATIC_DIR`.
 
+### Login com Google
+
+Opcional: com `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` definidos, o diálogo de conta ganha o botão "Entrar com o Google"; sem eles, nada aparece.
+
+1. No Google Cloud Console, crie uma credencial OAuth (tipo *Aplicativo da Web*).
+2. Em *URIs de redirecionamento autorizados*, cadastre `<APP_URL>/api/auth/google/callback` (em desenvolvimento, `http://localhost:5173/api/auth/google/callback`).
+3. Suba o servidor com as duas variáveis (no `docker-compose.yml` já estão previstas).
+
+Como funciona: OpenID Connect com código + PKCE, no servidor (`server/src/auth/google.ts`). O `state` e o `nonce` vão num cookie curto e HttpOnly; a pessoa é identificada pelo `sub` do Google, não pelo e-mail.
+
+- **E-mail verificado**: só entra quem o Google marca como verificado.
+- **Vínculo automático**: se o e-mail bater com o de uma conta existente, o Google é vinculado a ela (progresso e sandboxes ficam). Como o cadastro por senha não confirma o e-mail, **a senha dessa conta é anulada e as sessões abertas caem** no vínculo; quem é o dono entra pelo Google ou usa "Esqueci minha senha" para definir outra.
+- **Conta só-Google** não tem senha; para excluí-la confirma-se digitando o e-mail, e "Definir senha" manda o link de redefinição.
+
 Em desenvolvimento, o e-mail de redefinição aparece no terminal da API. Para produção falta plugar um `Mailer` real (ex.: Amazon SES). O serviço não conhece o SQLite: para levar a API para Lambda + DynamoDB basta outra implementação de `UserRepo`/`SessionRepo`/`ResetRepo`/`ProgressRepo`/`SandboxRepo`, e o Hono roda na Lambda sem mudar as rotas. Os limites de tentativa ficam em memória: com várias instâncias, precisam de um armazenamento compartilhado.
 
 ## Simplificações conscientes

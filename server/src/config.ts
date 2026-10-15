@@ -19,6 +19,9 @@ export interface Config {
   resetTokenMinutes: number;
   /** Custo do scrypt (N = 2^cost). Mais alto = mais lento para o atacante e para o servidor. */
   scryptCost: number;
+  /** Credenciais OAuth do Google; sem as duas, o login com Google fica desligado. */
+  googleClientId: string | null;
+  googleClientSecret: string | null;
   /** Pasta com o build do front-end para servir junto da API (produção num processo só). */
   staticDir: string | null;
 }
@@ -45,6 +48,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     sessionMaxDays: int(env.SESSION_MAX_DAYS, 180),
     resetTokenMinutes: int(env.RESET_TOKEN_MINUTES, 30),
     scryptCost: int(env.SCRYPT_COST, 15),
+    googleClientId: env.GOOGLE_CLIENT_ID || null,
+    googleClientSecret: env.GOOGLE_CLIENT_SECRET || null,
     staticDir: env.STATIC_DIR ?? null,
   };
 }

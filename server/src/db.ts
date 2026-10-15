@@ -62,6 +62,18 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX sandboxes_user ON sandboxes(user_id, updated_at DESC);
   `,
+  `
+  -- login social: o par (provedor, sub) identifica a pessoa; o e-mail pode mudar do lado do Google.
+  -- Conta só-Google guarda password_hash vazio (nenhuma senha confere com ele).
+  CREATE TABLE identities (
+    provider   TEXT NOT NULL,
+    subject    TEXT NOT NULL,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (provider, subject)
+  ) WITHOUT ROWID;
+  CREATE INDEX identities_user ON identities(user_id);
+  `,
 ];
 
 export type Database = DatabaseSync;

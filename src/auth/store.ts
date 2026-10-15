@@ -5,6 +5,10 @@ export interface User {
   email: string;
   name: string;
   createdAt: number;
+  /** Conta só-Google não tem senha própria. */
+  hasPassword: boolean;
+  /** Conta vinculada ao Google. */
+  google: boolean;
 }
 
 /**
@@ -24,6 +28,8 @@ export interface DialogState {
   notice?: string;
   /** Por que o diálogo abriu sozinho (ex.: fase que pede conta). */
   reason?: string;
+  /** Falha para mostrar no topo (ex.: voltou do Google com erro). */
+  error?: string;
 }
 
 type Listener = () => void;
@@ -33,6 +39,8 @@ export class AuthStore {
   status: AuthStatus = 'loading';
   user: User | null = null;
   dialog: DialogState | null = null;
+  /** O que o servidor oferece (o botão do Google só aparece se estiver configurado). */
+  providers = { google: false };
   private listeners = new Set<Listener>();
 
   subscribe(fn: Listener): () => void {
@@ -47,7 +55,8 @@ export class AuthStore {
 
   async init(): Promise<void> {
     try {
-      const { user } = await api<{ user: User | null }>('GET', '/auth/session');
+      const { user, providers } = await api<{ user: User | null; providers?: { google: boolean } }>('GET', '/auth/session');
+      this.providers = { google: providers?.google === true };
       this.set({ status: user ? 'signed-in' : 'guest', user });
     } catch (e) {
       this.set({ status: e instanceof ApiError && e.offline ? 'offline' : 'guest', user: null });
@@ -65,6 +74,11 @@ export class AuthStore {
   async login(email: string, password: string): Promise<void> {
     const { user } = await api<{ user: User }>('POST', '/auth/login', { email, password });
     this.set({ status: 'signed-in', user, dialog: null });
+  }
+
+  /** Navegação de página inteira: o Google devolve para `/api/auth/google/callback` e de lá para o jogo. */
+  loginWithGoogle(): void {
+    location.assign('/api/auth/google/start');
   }
 
   async register(name: string, email: string, password: string): Promise<void> {
@@ -104,8 +118,9 @@ export class AuthStore {
     this.set({ status: 'guest', user: null, dialog: { mode: 'login', notice: 'Senha redefinida. Entre com a nova senha.' } });
   }
 
-  async deleteAccount(password: string): Promise<void> {
-    await this.authed(() => api('DELETE', '/auth/account', { password }));
+  /** Com senha, confirma pela senha; conta só-Google confirma pelo e-mail. */
+  async deleteAccount(confirm: { password: string } | { email: string }): Promise<void> {
+    await this.authed(() => api('DELETE', '/auth/account', confirm));
     this.set({ status: 'guest', user: null, dialog: null });
   }
 

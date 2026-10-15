@@ -8,14 +8,16 @@ export type ErrorCode =
   | 'forbidden_origin'
   | 'not_found'
   | 'conflict'
-  | 'quota_exceeded';
+  | 'quota_exceeded'
+  | 'google_failed'
+  | 'google_unverified';
 
 /** Erro esperado da API: vira `{ error: { code, message, field? } }` com o status HTTP dado. */
 export class HttpError extends Error {
   constructor(
     readonly code: ErrorCode,
     message: string,
-    readonly status: 400 | 401 | 403 | 404 | 409 | 429,
+    readonly status: 400 | 401 | 403 | 404 | 409 | 429 | 502,
     readonly field?: string,
     readonly retryAfter?: number,
   ) {

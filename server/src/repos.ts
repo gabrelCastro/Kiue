@@ -41,6 +41,13 @@ export interface UserRepo {
   delete(id: string): void;
 }
 
+export interface IdentityRepo {
+  /** Dono de uma identidade externa (`provider` + `sub`), se já vinculada. */
+  findUserId(provider: string, subject: string): string | null;
+  insert(provider: string, subject: string, userId: string, now: number): void;
+  hasProvider(userId: string, provider: string): boolean;
+}
+
 export interface SessionRepo {
   insert(session: SessionRecord): void;
   find(id: string): SessionRecord | null;
@@ -319,5 +326,22 @@ export class SqliteSandboxRepo implements SandboxRepo {
 
   delete(userId: string, id: string): boolean {
     return Number(this.db.prepare('DELETE FROM sandboxes WHERE user_id = ? AND id = ?').run(userId, id).changes) === 1;
+  }
+}
+
+export class SqliteIdentityRepo implements IdentityRepo {
+  constructor(private db: Database) {}
+
+  findUserId(provider: string, subject: string): string | null {
+    const r = this.db.prepare('SELECT user_id FROM identities WHERE provider = ? AND subject = ?').get(provider, subject) as { user_id: string } | undefined;
+    return r?.user_id ?? null;
+  }
+
+  insert(provider: string, subject: string, userId: string, now: number): void {
+    this.db.prepare('INSERT INTO identities (provider, subject, user_id, created_at) VALUES (?, ?, ?, ?)').run(provider, subject, userId, now);
+  }
+
+  hasProvider(userId: string, provider: string): boolean {
+    return this.db.prepare('SELECT 1 FROM identities WHERE user_id = ? AND provider = ?').get(userId, provider) !== undefined;
   }
 }

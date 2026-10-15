@@ -50,6 +50,7 @@ export function AuthDialog() {
         )}
         {d.reason && <Alert kind="info">{d.reason}</Alert>}
         {d.notice && <Alert kind="success">{d.notice}</Alert>}
+        {d.error && <Alert kind="error">{d.error}</Alert>}
         {d.mode === 'login' && <LoginForm />}
         {d.mode === 'register' && <RegisterForm />}
         {d.mode === 'forgot' && <ForgotForm />}
@@ -68,6 +69,7 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   return (
     <form class="auth-form" noValidate onSubmit={f.submit(() => auth.login(email, password))}>
+      <GoogleButton label="Entrar com o Google" />
       <Field label="E-mail" error={f.fieldError('email')}>
         <TextInput type="email" autoComplete="email" value={email} onValue={setEmail} autoFocus required />
       </Field>
@@ -110,6 +112,7 @@ function RegisterForm() {
         return auth.register(name, email, password);
       })}
     >
+      <GoogleButton label="Continuar com o Google" />
       {!auth.dialog?.reason && <p class="muted small auth-lead">Com a conta você libera as 22 fases e o sandbox completo, e seu progresso e seus sandboxes ficam salvos para jogar de qualquer computador. É grátis.</p>}
       <Field label="Nome" error={f.fieldError('name')}>
         <TextInput type="text" autoComplete="name" maxLength={60} value={name} onValue={setName} autoFocus required />
@@ -214,7 +217,10 @@ function AccountPanel() {
         <div>
           <div class="account-name">{user.name}</div>
           <div class="muted small">{user.email}</div>
-          <div class="muted small">Conta criada em {new Date(user.createdAt).toLocaleDateString('pt-BR')}</div>
+          <div class="muted small">
+            Conta criada em {new Date(user.createdAt).toLocaleDateString('pt-BR')}
+            {user.google ? ' · conectada ao Google' : ''}
+          </div>
         </div>
       </div>
       <NameSection initial={user.name} />
@@ -267,6 +273,33 @@ function NameSection({ initial }: { initial: string }) {
 }
 
 function PasswordSection() {
+  const user = auth.user;
+  if (user && !user.hasPassword) return <SetPasswordSection email={user.email} />;
+  return <ChangePasswordSection />;
+}
+
+/** Conta só-Google: definir uma senha passa pelo link no e-mail (prova que a caixa é da pessoa). */
+function SetPasswordSection({ email }: { email: string }) {
+  const f = useForm();
+  const [sent, setSent] = useState(false);
+  return (
+    <div class="account-section">
+      <div class="row between">
+        <div>
+          <div class="field-label">Senha</div>
+          <div class="muted small">Você entra com o Google. Para entrar também com e-mail e senha, defina uma.</div>
+        </div>
+        <button class="btn" disabled={f.busy || sent} onClick={f.submit(async () => { await auth.requestReset(email); setSent(true); })}>
+          Definir senha
+        </button>
+      </div>
+      {sent && <p class="field-ok">Enviamos um link para {email}.</p>}
+      <FormError error={f.generalError} />
+    </div>
+  );
+}
+
+function ChangePasswordSection() {
   const f = useForm();
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState('');
@@ -341,6 +374,7 @@ function DeleteSection() {
   const f = useForm();
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState('');
+  const byEmail = auth.user ? !auth.user.hasPassword : false;
   if (!open) {
     return (
       <div class="account-section row between">
@@ -355,11 +389,17 @@ function DeleteSection() {
     );
   }
   return (
-    <form class="account-section auth-form danger-zone" noValidate onSubmit={f.submit(() => auth.deleteAccount(password))}>
-      <Alert kind="error">Esta ação não pode ser desfeita. Confirme com a sua senha.</Alert>
-      <Field label="Senha" error={f.fieldError('password')}>
-        <PasswordInput value={password} onInput={setPassword} autoComplete="current-password" autoFocus />
-      </Field>
+    <form class="account-section auth-form danger-zone" noValidate onSubmit={f.submit(() => auth.deleteAccount(byEmail ? { email: password } : { password }))}>
+      <Alert kind="error">Esta ação não pode ser desfeita. {byEmail ? 'Confirme digitando o e-mail da conta.' : 'Confirme com a sua senha.'}</Alert>
+      {byEmail ? (
+        <Field label="E-mail da conta" error={f.fieldError('email')}>
+          <TextInput type="email" autoComplete="off" value={password} onValue={setPassword} autoFocus required />
+        </Field>
+      ) : (
+        <Field label="Senha" error={f.fieldError('password')}>
+          <PasswordInput value={password} onInput={setPassword} autoComplete="current-password" autoFocus />
+        </Field>
+      )}
       <FormError error={f.generalError} />
       <div class="row end gap">
         <button type="button" class="btn ghost" onClick={() => setOpen(false)}>
@@ -374,6 +414,27 @@ function DeleteSection() {
 }
 
 // ───────────── peças de formulário ─────────────
+
+/** Botão do Google com a marca; só aparece quando o servidor tem o login configurado. */
+function GoogleButton({ label }: { label: string }) {
+  if (!auth.providers.google) return null;
+  return (
+    <>
+      <button type="button" class="btn google-btn block" onClick={() => auth.loginWithGoogle()}>
+        <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true">
+          <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z" />
+          <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z" />
+          <path fill="#FBBC05" d="M10.5 28.7c-.5-1.5-.8-3.1-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z" />
+          <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z" />
+        </svg>
+        {label}
+      </button>
+      <div class="auth-or" aria-hidden="true">
+        <span>ou</span>
+      </div>
+    </>
+  );
+}
 
 /** Estado comum de um formulário: enviando, erro por campo e erro geral. */
 function useForm() {
