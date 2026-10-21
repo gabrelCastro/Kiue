@@ -1,6 +1,9 @@
 services:
   kiue:
     build: .
+    # o Jenkins constrói a imagem antes e passa a tag em KIUE_IMAGE (deploy com --no-build);
+    # localmente, `docker compose up --build` continua construindo a partir do código
+    image: ${KIUE_IMAGE:-kiue:latest}
     ports:
       - "${PORT:-8787}:8787"
     environment:
