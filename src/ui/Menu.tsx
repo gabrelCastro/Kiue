@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import type { LockReason } from '../game/controller';
 import { CATALOG, type LevelMeta } from '../game/level-catalog';
 import { auth } from '../auth/store';
 import { AccountButton } from './auth/AccountButton';
@@ -11,6 +12,8 @@ export function Menu() {
   const ctrl = useController();
   usePrefetchNext();
   const totalStars = Object.values(ctrl.progress).reduce((s, p) => s + p.stars, 0);
+  const next = nextLevel(ctrl);
+  const started = CATALOG.some((l) => (ctrl.progress[l.id]?.stars ?? 0) > 0);
   return (
     <div class="menu-shell">
       <nav class="console-nav" aria-label="Navegação">
@@ -42,8 +45,8 @@ export function Menu() {
             <h1>Kiuê</h1>
             <p>Monte arquiteturas de mensageria e veja cada mensagem sair do produtor, esperar na fila e ser processada pelos consumidores.</p>
             <div class="hero-actions">
-              <button class="btn primary" onClick={() => ctrl.startLevel(CATALOG[0].id)}>
-                Começar pela fase 1
+              <button class="btn primary" onClick={() => ctrl.startLevel((next?.level ?? CATALOG[0]).id)}>
+                {started && next ? 'Continuar jogando' : 'Começar pela fase 1'}
               </button>
               <button class="btn" onClick={() => ctrl.startLevel('sandbox')}>
                 Abrir o sandbox
@@ -51,13 +54,24 @@ export function Menu() {
             </div>
           </div>
         </header>
+        {started && <ContinueCard next={next} />}
         <GuestBanner />
-        <Track title="Trilha Iniciante" subtitle="Do zero: filas, fan-out, DLQ, ordem e custo." levels={CATALOG.filter((l) => l.track === 'iniciante')} />
-        <Track
-          title="Trilha Certificação"
-          subtitle="Detalhes que caem na prova AWS Developer / Solutions Architect: Lambda, heartbeat, retries do SNS, cotas e limites. Libera após a fase 5 da trilha Iniciante."
-          levels={CATALOG.filter((l) => l.track === 'certificacao')}
-        />
+        <div class="tracks">
+          <Track
+            track="iniciante"
+            title="Trilha Iniciante"
+            subtitle="Do zero: filas, fan-out, DLQ, ordem e custo."
+            levels={CATALOG.filter((l) => l.track === 'iniciante')}
+            next={next?.level.id}
+          />
+          <Track
+            track="certificacao"
+            title="Trilha Certificação"
+            subtitle="O que cai na prova AWS Developer e Solutions Architect: Lambda, heartbeat, retries do SNS, cotas e limites."
+            levels={CATALOG.filter((l) => l.track === 'certificacao')}
+            next={next?.level.id}
+          />
+        </div>
         <SavedSandboxes />
         <footer class="menu-footer muted small">
           Simulação didática: tempos e limites são reduzidos para caber num jogo, mas as regras seguem o comportamento do SQS/SNS.{' '}
@@ -110,45 +124,157 @@ function GuestBanner() {
   );
 }
 
-function Track({ title, subtitle, levels }: { title: string; subtitle: string; levels: readonly LevelMeta[] }) {
+type Ctrl = ReturnType<typeof useController>;
+
+/** A próxima fase a jogar: a primeira ainda sem estrela que não depende de terminar outra antes. */
+function nextLevel(ctrl: Ctrl): { level: LevelMeta; lock: LockReason | null } | null {
+  for (const level of CATALOG) {
+    if ((ctrl.progress[level.id]?.stars ?? 0) > 0) continue;
+    const lock = ctrl.lockReason(level);
+    if (lock !== 'progress') return { level, lock };
+  }
+  return null;
+}
+
+const TRACK_NAME: Record<string, string> = { iniciante: 'Iniciante', certificacao: 'Certificação' };
+
+/** O que falta para liberar uma fase bloqueada pelo progresso. */
+function unlockHint(level: LevelMeta): string {
+  if (level.track === 'certificacao' && level.index === 1) return 'Termine a fase 5 da Iniciante';
+  return `Termine a fase ${level.index - 1}`;
+}
+
+/** Para quem já começou: a próxima fase, com o conceito que ela ensina. */
+function ContinueCard({ next }: { next: ReturnType<typeof nextLevel> }) {
+  const ctrl = useController();
+  if (!next) {
+    return (
+      <section class="continue-card all-done">
+        <div class="continue-body">
+          <span class="continue-kicker">Trilhas completas</span>
+          <h2>Você terminou todas as fases</h2>
+          <p class="muted">Monte o que quiser no sandbox, ou volte a uma fase para buscar as 3 estrelas.</p>
+        </div>
+        <button class="btn primary" onClick={() => ctrl.startLevel('sandbox')}>
+          Abrir o sandbox
+        </button>
+      </section>
+    );
+  }
+  const { level, lock } = next;
+  return (
+    <section class="continue-card">
+      <div class="continue-body">
+        <span class="continue-kicker">Continue de onde parou</span>
+        <span class="continue-where">
+          Trilha {TRACK_NAME[level.track]} · fase {level.index}
+        </span>
+        <h2>{level.title}</h2>
+        <span class="concept-tag">{level.concept}</span>
+      </div>
+      <button class="btn primary" onClick={() => ctrl.startLevel(level.id)}>
+        {lock === 'account' ? 'Criar conta para continuar' : 'Continuar'}
+      </button>
+    </section>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor" />
+      <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.6" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+type StepState = 'done' | 'next' | 'open' | 'locked' | 'account';
+
+function Track({ track, title, subtitle, levels, next }: { track: string; title: string; subtitle: string; levels: readonly LevelMeta[]; next?: string }) {
   const ctrl = useController();
   const a = useAuth();
+  const doneCount = levels.filter((l) => (ctrl.progress[l.id]?.stars ?? 0) > 0).length;
+  const stars = levels.reduce((s, l) => s + (ctrl.progress[l.id]?.stars ?? 0), 0);
+  const firstLock = ctrl.lockReason(levels[0]);
+  const accountLocked = levels.filter((l) => ctrl.lockReason(l) === 'account').length;
   return (
-    <section class="track">
-      <h2>{title}</h2>
-      <p class="muted">{subtitle}</p>
-      <div class="level-grid">
+    <section class={`track track-${track}`}>
+      <header class="track-head">
+        <span class="track-badge">{TRACK_NAME[track]}</span>
+        <h2>{title}</h2>
+        <p class="muted">{subtitle}</p>
+        <div class="track-progress" aria-label={`${doneCount} de ${levels.length} fases concluídas, ${stars} de ${levels.length * 3} estrelas`}>
+          <span class="track-bar">
+            <span style={{ width: `${(doneCount / levels.length) * 100}%` }} />
+          </span>
+          <span class="track-count">
+            {doneCount}/{levels.length} fases · {stars}/{levels.length * 3} ★
+          </span>
+        </div>
+        {firstLock === 'progress' && (
+          <p class="track-lock">
+            <LockIcon /> Libera ao terminar a fase 5 da Iniciante
+          </p>
+        )}
+        {accountLocked > 0 && a.status === 'guest' && (
+          <p class="track-lock">
+            <LockIcon /> {accountLocked === levels.length ? 'Crie uma conta grátis para jogar esta trilha' : `Crie uma conta grátis para liberar as outras ${accountLocked} fases`}
+          </p>
+        )}
+      </header>
+      <ol class="trail">
         {levels.map((l) => {
           const lock = ctrl.lockReason(l);
           const p = ctrl.progress[l.id];
           // fase que pede conta continua clicável: o clique abre o cadastro
           const needsAccount = lock === 'account';
+          const state: StepState = p?.stars && !lock ? 'done' : l.id === next && !lock ? 'next' : needsAccount ? 'account' : lock ? 'locked' : 'open';
           return (
-            <button
-              onPointerEnter={() => ctrl.prefetchLevel(l.id)}
-              onFocus={() => ctrl.prefetchLevel(l.id)}
-              class={`level-card ${lock ? 'locked' : ''} ${needsAccount ? 'needs-account' : ''} ${p?.stars && !lock ? 'done' : ''}`}
-              disabled={lock === 'progress' || (needsAccount && a.status !== 'guest')}
-              onClick={() => ctrl.startLevel(l.id)}
-            >
-              <span class="lc-num">{l.index}</span>
-              <span class="lc-title">{l.title}</span>
-              <span class="lc-concept">{l.concept}</span>
-              <span class="lc-stars">
-                {ctrl.loadingLevel === l.id ? (
-                  <span class="muted small">Carregando…</span>
-                ) : !lock ? (
-                  <Stars n={p?.stars ?? 0} />
-                ) : needsAccount ? (
-                  a.status === 'loading' ? null : <span class="lock-tag">Requer conta</span>
-                ) : (
-                  <span class="muted small">bloqueada</span>
-                )}
+            <li class={`trail-step is-${state}`} key={l.id}>
+              <span class="trail-dot" aria-hidden="true">
+                {state === 'done' ? <CheckIcon /> : state === 'locked' || state === 'account' ? <LockIcon /> : l.index}
               </span>
-            </button>
+              <button
+                onPointerEnter={() => ctrl.prefetchLevel(l.id)}
+                onFocus={() => ctrl.prefetchLevel(l.id)}
+                class={`level-card ${lock ? 'locked' : ''} ${needsAccount ? 'needs-account' : ''} ${state === 'done' ? 'done' : ''} ${state === 'next' ? 'next' : ''}`}
+                disabled={lock === 'progress' || (needsAccount && a.status !== 'guest')}
+                onClick={() => ctrl.startLevel(l.id)}
+              >
+                <span class="lc-body">
+                  <span class="lc-title">
+                    <span class="lc-num">{l.index}.</span> {l.title}
+                  </span>
+                  <span class="concept-tag">{l.concept}</span>
+                </span>
+                <span class="lc-side">
+                  {ctrl.loadingLevel === l.id ? (
+                    <span class="muted small">Carregando…</span>
+                  ) : state === 'done' ? (
+                    <Stars n={p!.stars} />
+                  ) : state === 'next' ? (
+                    <span class="lc-play">Jogar ▸</span>
+                  ) : needsAccount ? (
+                    a.status === 'loading' ? null : <span class="lock-tag">Requer conta</span>
+                  ) : lock ? (
+                    <span class="lc-hint">{unlockHint(l)}</span>
+                  ) : (
+                    <Stars n={0} />
+                  )}
+                </span>
+              </button>
+            </li>
           );
         })}
-      </div>
+      </ol>
     </section>
   );
 }
