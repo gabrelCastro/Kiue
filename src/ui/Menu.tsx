@@ -1,4 +1,4 @@
-import { useEffect } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { CATALOG, type LevelMeta } from '../game/level-catalog';
 import { auth } from '../auth/store';
 import { AccountButton } from './auth/AccountButton';
@@ -36,8 +36,20 @@ export function Menu() {
       </nav>
       <div class="menu">
         <header class="menu-hero">
-          <h1>Kiuê</h1>
-          <p>Aprenda Amazon SQS e SNS montando arquiteturas e vendo as mensagens circularem.</p>
+          <Showcase />
+          <div class="hero-copy">
+            <span class="hero-kicker">Amazon SQS e SNS na prática</span>
+            <h1>Kiuê</h1>
+            <p>Monte arquiteturas de mensageria e veja cada mensagem sair do produtor, esperar na fila e ser processada pelos consumidores.</p>
+            <div class="hero-actions">
+              <button class="btn primary" onClick={() => ctrl.startLevel(CATALOG[0].id)}>
+                Começar pela fase 1
+              </button>
+              <button class="btn" onClick={() => ctrl.startLevel('sandbox')}>
+                Abrir o sandbox
+              </button>
+            </div>
+          </div>
         </header>
         <GuestBanner />
         <Track title="Trilha Iniciante" subtitle="Do zero: filas, fan-out, DLQ, ordem e custo." levels={CATALOG.filter((l) => l.track === 'iniciante')} />
@@ -138,5 +150,45 @@ function Track({ title, subtitle, levels }: { title: string; subtitle: string; l
         })}
       </div>
     </section>
+  );
+}
+
+/** Tela estreita: a cena ocupa a largura toda e o texto vai para baixo dela. */
+const NARROW = '(max-width: 760px)';
+
+/**
+ * Animação da tela inicial (render/showcase.ts): produtor → fila → consumidor com as peças do
+ * jogo. three.js chega num chunk separado; até lá, o palco mostra só o fundo.
+ */
+function Showcase() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let dispose: (() => void) | null = null;
+    let cancelled = false;
+    const narrow = window.matchMedia(NARROW);
+    import('../render/showcase')
+      .then((m) => {
+        if (cancelled) return;
+        dispose = m.mountShowcase(el, { frame: () => (narrow.matches ? 1 : 0.6) });
+        setReady(true);
+      })
+      .catch(() => {
+        // sem WebGL ou falha ao baixar: o palco fica só com o fundo
+      });
+    return () => {
+      cancelled = true;
+      dispose?.();
+    };
+  }, []);
+  return (
+    <div
+      ref={ref}
+      class={`hero-stage ${ready ? 'ready' : ''}`}
+      role="img"
+      aria-label="Animação: o produtor envia mensagens, a fila guarda as que chegam em rajada e os braços robóticos do consumidor processam uma por vez."
+    />
   );
 }
