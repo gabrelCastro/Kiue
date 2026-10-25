@@ -30,6 +30,8 @@ pipeline {
     post {
         success { echo "Kiuê #${BUILD_NUMBER} (${env.BRANCH_NAME}) OK" }
         failure { echo "Kiuê #${BUILD_NUMBER} (${env.BRANCH_NAME}) falhou" }
-        cleanup { sh "docker image prune -f" }
+        // só imagens soltas com mais de 24 h: builds de branches diferentes rodam ao mesmo tempo
+        // no mesmo Docker, e um prune geral apagava camadas que o outro build ainda estava gravando
+        cleanup { sh 'docker image prune -f --filter "until=24h"' }
     }
 }
