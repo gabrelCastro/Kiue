@@ -204,6 +204,36 @@ function Track({ track, title, subtitle, levels, next }: { track: string; title:
   const doneCount = levels.filter((l) => (ctrl.progress[l.id]?.stars ?? 0) > 0).length;
   const stars = levels.reduce((s, l) => s + (ctrl.progress[l.id]?.stars ?? 0), 0);
   const firstLock = ctrl.lockReason(levels[0]);
+  const trail = useRef<HTMLOListElement>(null);
+  const [edges, setEdges] = useState({ start: true, end: true });
+  // na horizontal (tela larga) a trilha rola de lado: abre centrada na próxima fase e os botões
+  // ‹ › aparecem só quando há o que rolar para aquele lado
+  useEffect(() => {
+    const el = trail.current;
+    if (!el) return;
+    const update = () => {
+      const max = el.scrollWidth - el.clientWidth;
+      setEdges({ start: el.scrollLeft <= 2, end: el.scrollLeft >= max - 2 });
+    };
+    // centra a próxima fase (mesmo pedindo conta); sem ela nesta trilha, a primeira ainda por fazer
+    const step = el.querySelector<HTMLElement>('[data-next]') ?? el.querySelector<HTMLElement>('.trail-step:not(.is-done)');
+    const raf = requestAnimationFrame(() => {
+      if (step && el.scrollWidth > el.clientWidth) {
+        const left = step.getBoundingClientRect().left - el.getBoundingClientRect().left + el.scrollLeft;
+        el.scrollLeft = left - el.clientWidth / 2 + step.offsetWidth / 2;
+      }
+      update();
+    });
+    el.addEventListener('scroll', update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      cancelAnimationFrame(raf);
+      el.removeEventListener('scroll', update);
+      ro.disconnect();
+    };
+  }, [next, doneCount]);
+  const scrollBy = (dir: 1 | -1) => trail.current?.scrollBy({ left: dir * trail.current.clientWidth * 0.8, behavior: 'smooth' });
   const accountLocked = levels.filter((l) => ctrl.lockReason(l) === 'account').length;
   return (
     <section class={`track track-${track}`}>
@@ -218,6 +248,14 @@ function Track({ track, title, subtitle, levels, next }: { track: string; title:
           <span class="track-count">
             {doneCount}/{levels.length} fases · {stars}/{levels.length * 3} ★
           </span>
+          <span class="trail-nav">
+            <button class="btn icon" aria-label="Fases anteriores" disabled={edges.start} onClick={() => scrollBy(-1)}>
+              ‹
+            </button>
+            <button class="btn icon" aria-label="Próximas fases" disabled={edges.end} onClick={() => scrollBy(1)}>
+              ›
+            </button>
+          </span>
         </div>
         {firstLock === 'progress' && (
           <p class="track-lock">
@@ -230,7 +268,7 @@ function Track({ track, title, subtitle, levels, next }: { track: string; title:
           </p>
         )}
       </header>
-      <ol class="trail">
+      <ol class={`trail ${edges.start ? '' : 'fade-start'} ${edges.end ? '' : 'fade-end'}`} ref={trail}>
         {levels.map((l) => {
           const lock = ctrl.lockReason(l);
           const p = ctrl.progress[l.id];
@@ -238,7 +276,7 @@ function Track({ track, title, subtitle, levels, next }: { track: string; title:
           const needsAccount = lock === 'account';
           const state: StepState = p?.stars && !lock ? 'done' : l.id === next && !lock ? 'next' : needsAccount ? 'account' : lock ? 'locked' : 'open';
           return (
-            <li class={`trail-step is-${state}`} key={l.id}>
+            <li class={`trail-step is-${state}`} key={l.id} data-next={l.id === next ? '' : undefined}>
               <span class="trail-dot" aria-hidden="true">
                 {state === 'done' ? <CheckIcon /> : state === 'locked' || state === 'account' ? <LockIcon /> : l.index}
               </span>

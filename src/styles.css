@@ -1661,7 +1661,7 @@ details p {
 }
 .menu {
   width: 100%;
-  max-width: 1080px;
+  max-width: min(1320px, 100%);
   margin: 0 auto;
   padding: 28px 24px 48px;
   display: flex;
@@ -1777,14 +1777,19 @@ details p {
 /* ── trilhas: duas colunas, cada uma um caminho vertical de fases ── */
 .tracks {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
-  align-items: start;
 }
-@media (max-width: 900px) {
-  .tracks {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.trail-nav {
+  display: none;
+  gap: 4px;
+}
+.trail-nav .btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
 }
 .track {
   background: var(--panel);
@@ -2025,6 +2030,7 @@ details p {
   align-items: flex-start;
   gap: 4px;
   min-width: 0;
+  max-width: 100%;
 }
 .lc-num {
   color: var(--muted);
@@ -2052,9 +2058,7 @@ details p {
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--text-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .level-card.done .concept-tag {
   background: #dcf5e2;
@@ -2083,6 +2087,71 @@ details p {
   color: var(--muted);
   text-align: right;
   max-width: 120px;
+}
+
+/* tela larga: a trilha corre na horizontal (marcadores em cima, ligados pela linha; cartões
+   embaixo) e rola de lado, com esmaecido na borda que ainda tem fases */
+@media (min-width: 901px) {
+  .trail-nav {
+    display: inline-flex;
+  }
+  .trail {
+    flex-direction: row;
+    gap: 12px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scroll-padding: 0 24px;
+    padding: 6px 2px 10px;
+    scrollbar-width: thin;
+  }
+  .trail.fade-start {
+    mask-image: linear-gradient(90deg, transparent, #000 48px);
+  }
+  .trail.fade-end {
+    mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent);
+  }
+  .trail.fade-start.fade-end {
+    mask-image: linear-gradient(90deg, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+  }
+  .trail-step {
+    flex: 0 0 196px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 32px 1fr;
+    align-items: stretch;
+    gap: 10px;
+    scroll-snap-align: start;
+  }
+  .trail-step.is-next {
+    flex-basis: 232px;
+  }
+  /* trecho de linha até o próximo marcador, agora na horizontal */
+  .trail-step:not(:last-child)::after {
+    left: 36px;
+    top: 15px;
+    width: calc(100% - 40px + 12px);
+    height: 0;
+    border-left: 0;
+    border-top: 2px dashed var(--border-strong);
+  }
+  .trail-step.is-done:not(:last-child)::after {
+    border-left: 0;
+    border-top: 2px solid var(--ok);
+  }
+  .trail-step .level-card {
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    height: 100%;
+    min-height: 116px;
+  }
+  .trail-step .level-card.next {
+    padding: 12px 14px;
+  }
+  .lc-hint {
+    text-align: left;
+    max-width: none;
+  }
 }
 
 /* ── cartão "continue de onde parou" ── */
