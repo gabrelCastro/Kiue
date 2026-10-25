@@ -2,13 +2,9 @@ import {
   BoxGeometry,
   CanvasTexture,
   Color,
-  ConeGeometry,
   CylinderGeometry,
-  EdgesGeometry,
   Group,
   IcosahedronGeometry,
-  LineBasicMaterial,
-  LineSegments,
   Mesh,
   MeshBasicMaterial,
   PlaneGeometry,
@@ -20,8 +16,10 @@ import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { lambdaCap } from '../sim/engine';
 import type { GraphNode } from '../sim/types';
 import { bakedMaterial, bakeTree } from './bake';
+import { modelGeometry, modelGeometryAt } from './models';
 import { beltTexture, contactShadowTexture } from './textures';
-import { LAMBDA_RING, LIFT, NODE_SCALE, QUEUE_DEPTH, QUEUE_HEIGHT, QUEUE_LEN } from './layout';
+import { BENCH_TOP, LAMBDA_RING, LIFT, NODE_SCALE, QUEUE_DEPTH, QUEUE_HEIGHT, QUEUE_LEN, TOKEN_H, workerCell } from './layout';
+import { ArmRig } from './robots';
 
 export const NODE_COLORS = {
   // paleta dos ícones de arquitetura da AWS (mesmas cores de styles.css)
@@ -48,6 +46,19 @@ function lambdaGlyph(): CanvasTexture {
   return lambdaTexture;
 }
 
+/** Uma parte modelada no OpenSCAD, apoiada no pedestal. */
+function part(name: string, material: MeshBasicMaterial): Mesh {
+  const m = new Mesh(modelGeometry(name), material);
+  m.position.y = LIFT;
+  return m;
+}
+
+// Pontos tirados dos .scad: (x, z, −y) / 100, acima do pedestal e antes do NODE_SCALE.
+/** Topo do portão de enrolar do produtor (W/2 − DOOR_IN + 1,3; 0; DOOR_Z1). */
+const DOOR_AT = { x: 0.533, y: 0.44, z: 0 };
+/** Quanto o portão enrola (fração da altura) a cada mensagem enviada. */
+export const DOOR_OPEN = 0.85;
+
 export interface NodeView {
   node: GraphNode;
   group: Group;
@@ -57,6 +68,12 @@ export interface NodeView {
   workerPads: Mesh[];
   body: Mesh;
   baseColor: string;
+  /** Portão do produtor: enrola e desenrola a cada mensagem enviada. */
+  door?: Object3D;
+  /** Início (performance.now) da última abertura do portão. */
+  doorAt: number;
+  /** Braços robóticos do consumidor, um por worker. */
+  arms?: ArmRig;
 }
 
 /**
@@ -114,33 +131,34 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
   const spinners: Object3D[] = [];
   const workerPads: Mesh[] = [];
   let body: Mesh;
+  let door: Object3D | undefined;
+  let arms: ArmRig | undefined;
   let baseColor: string;
   let labelY: number;
   const lift = LIFT;
 
   switch (node.kind) {
     case 'producer': {
-      baseColor = '#aab7b8';
+      // doca de expedição (models/produtor.scad): o portão enrola a cada mensagem enviada
+      baseColor = '#d5dbdb';
       contactShadow(model, 1.6, 1.5);
       const base = pedestal(model, 1.6, 1.5, NODE_COLORS.producer);
-      body = new Mesh(rounded(1.3, 0.85, 1.2, 0.08), mat(baseColor));
-      body.position.y = lift + 0.425;
-      const roof = new Mesh(new ConeGeometry(1.0, 0.55, 4), mat(NODE_COLORS.producer, { flatShading: true }));
-      roof.position.y = lift + 1.12;
-      roof.rotation.y = Math.PI / 4;
-      const chimney = new Mesh(rounded(0.2, 0.5, 0.2, 0.04), mat('#414d5c'));
-      chimney.position.set(0.38, lift + 1.2, -0.25);
-      // fachada voltada para a câmera (+z): porta e janelas acesas
-      const door = new Mesh(new PlaneGeometry(0.3, 0.45), mat('#414d5c'));
-      door.position.set(0, lift + 0.23, 0.601);
-      const windowMat = mat('#fff1c2', { emissive: '#ffd56b', emissiveIntensity: 0.35 });
-      const winL = new Mesh(new PlaneGeometry(0.26, 0.22), windowMat);
-      winL.position.set(-0.4, lift + 0.52, 0.601);
-      const winR = winL.clone();
-      winR.position.x = 0.4;
-      model.add(body, roof, chimney, door, winL, winR);
+      body = part('produtor/corpo', mat(baseColor));
+      const roof = part('produtor/telhado', mat(NODE_COLORS.producer));
+      door = part('produtor/portao', mat('#8a929b'));
+      door.position.set(DOOR_AT.x, lift + DOOR_AT.y, DOOR_AT.z);
+      model.add(
+        body,
+        roof,
+        door,
+        part('produtor/detalhe', mat('#2b3036')),
+        part('produtor/doca', mat('#b8bcc2')),
+        part('produtor/janelas', mat('#fff1c2', { emissive: '#ffd56b' })),
+        part('produtor/palete', mat('#9a7448')),
+        part('produtor/caixas', mat('#c8a165')),
+      );
       pickables.push(body, roof, base);
-      labelY = 1.75;
+      labelY = 1.4;
       break;
     }
     case 'topic': {
@@ -165,20 +183,16 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
       break;
     }
     case 'queue': {
+      // models/fila.scad: tampas, aros e barras, bandeja e roletes; vidro e esteira ficam aqui
       baseColor = isDlq ? NODE_COLORS.dlq : NODE_COLORS.queue;
       const fifo = (node as GraphNode<'queue'>).config.fifo;
-      const solid = mat(baseColor);
       contactShadow(model, QUEUE_LEN + 0.3, QUEUE_DEPTH + 0.3);
       pedestal(model, QUEUE_LEN + 0.3, QUEUE_DEPTH + 0.3, baseColor);
-      // tubo de vidro: transparente para mostrar as mensagens, com reflexo do ambiente
+      // tubo de vidro: transparente para mostrar as mensagens
       body = new Mesh(new BoxGeometry(QUEUE_LEN, QUEUE_HEIGHT, QUEUE_DEPTH), new MeshBasicMaterial({ color: baseColor, transparent: true, opacity: 0.13, depthWrite: false }));
       body.position.y = lift + QUEUE_HEIGHT / 2;
       body.renderOrder = 2;
-      const edges = new LineSegments(new EdgesGeometry(body.geometry), new LineBasicMaterial({ color: shade(baseColor, 0.1), transparent: true, opacity: 0.6 }));
-      edges.position.copy(body.position);
       // esteira: as mensagens esperam em cima dela e ela rola para a cabeça da fila (à direita)
-      const floor = new Mesh(rounded(QUEUE_LEN, 0.06, QUEUE_DEPTH, 0.03), mat('#2b3036', { roughness: 0.9, metalness: 0 }));
-      floor.position.y = lift + 0.03;
       const beltTex = beltTexture();
       beltTex.repeat.set(QUEUE_LEN * 1.4, 1);
       const beltMat = bakedMaterial('#ffffff');
@@ -186,60 +200,38 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
       const belt = new Mesh(new PlaneGeometry(QUEUE_LEN - 0.1, QUEUE_DEPTH - 0.16), beltMat);
       belt.rotation.x = -Math.PI / 2;
       belt.position.y = lift + 0.062;
-      // roletes nas pontas da esteira
-      for (const x of [-QUEUE_LEN / 2 + 0.16, QUEUE_LEN / 2 - 0.16]) {
-        const roller = new Mesh(new CylinderGeometry(0.06, 0.06, QUEUE_DEPTH - 0.1, 16), mat('#8a929b', { metalness: 0.5, roughness: 0.35 }));
-        roller.rotation.x = Math.PI / 2;
-        roller.position.set(x, lift + 0.06, 0);
-        model.add(roller);
-      }
-      model.add(belt);
-      const capL = new Mesh(rounded(0.14, QUEUE_HEIGHT + 0.1, QUEUE_DEPTH + 0.12, 0.05), solid);
-      capL.position.set(-QUEUE_LEN / 2, lift + QUEUE_HEIGHT / 2 + 0.05, 0);
-      const capR = capL.clone();
-      capR.position.x = QUEUE_LEN / 2;
-      model.add(floor, body, edges, capL, capR);
-      if (fifo) {
-        // trilhos marcam a fila FIFO: "uma por vez, em ordem"
-        for (const z of [-QUEUE_DEPTH / 2 + 0.08, QUEUE_DEPTH / 2 - 0.08]) {
-          const rail = new Mesh(rounded(QUEUE_LEN, 0.06, 0.06, 0.03), mat('#414d5c'));
-          rail.position.set(0, lift + QUEUE_HEIGHT, z);
-          model.add(rail);
-        }
-      }
-      pickables.push(body, floor, capL, capR);
+      const frame = part('fila/moldura', mat(baseColor));
+      const tray = part('fila/base', mat('#2b3036'));
+      model.add(tray, belt, part('fila/rolos', mat('#8a929b')), part('fila/detalhe', mat('#414d5c')), frame, body);
+      // FIFO: guias formam uma pista única ("uma por vez, em ordem"); DLQ: faixas de alerta
+      if (fifo) model.add(part('fila/guias', mat('#414d5c')));
+      if (isDlq) model.add(part('fila/alerta', mat('#f2b705')));
+      pickables.push(body, frame, tray);
       labelY = lift + QUEUE_HEIGHT + 0.45;
       break;
     }
     case 'consumer': {
+      // bancada de triagem (models/consumidor.scad): uma célula com braço robótico por worker
       baseColor = NODE_COLORS.consumer;
       contactShadow(model, 1.7, 1.6);
       const base = pedestal(model, 1.7, 1.6, baseColor);
-      body = new Mesh(rounded(1.5, 0.78, 1.4, 0.1), mat(baseColor));
-      body.position.y = lift + 0.39;
-      // fachada de servidor: frestas de ventilação e a engrenagem que gira enquanto processa
-      const ventMat = mat(shade(baseColor, 0.45, '#0f141a'));
-      for (const y of [0.22, 0.36, 0.5]) {
-        const vent = new Mesh(new BoxGeometry(0.5, 0.04, 0.02), ventMat);
-        vent.position.set(-0.35, lift + y, 0.705);
-        model.add(vent);
-      }
-      const gear = new Mesh(new TorusGeometry(0.2, 0.07, 6, 8), mat(shade(baseColor, 0.45, '#0f141a')));
-      gear.position.set(0.38, lift + 0.39, 0.72);
-      const led = new Mesh(new CylinderGeometry(0.04, 0.04, 0.02, 12), mat('#29ad32', { emissive: '#29ad32', emissiveIntensity: 0.4 }));
-      led.rotation.x = Math.PI / 2;
-      led.position.set(-0.6, lift + 0.6, 0.71);
-      model.add(body, gear, led);
-      spinners.push(gear);
+      body = part('consumidor/corpo', mat(baseColor));
+      model.add(body, part('consumidor/detalhe', mat('#2b3036')), part('consumidor/tampo', mat('#e9ebed')));
       const workers = Math.max(1, (node as GraphNode<'consumer'>).config.workers);
-      const rows = Math.ceil(workers / 3);
-      for (let j = 0; j < workers; j++) {
-        const perRow = Math.min(3, workers);
-        const pad = new Mesh(new CylinderGeometry(0.17, 0.17, 0.05, 20), mat('#b4b4bb'));
-        pad.position.set(((j % 3) - (perRow - 1) / 2) * 0.45, lift + 0.8, (Math.floor(j / 3) - (rows - 1) / 2) * 0.45);
+      const cells = Array.from({ length: workers }, (_, j) => {
+        const c = workerCell(j, workers);
+        return { x: c.x, y: lift + BENCH_TOP, z: c.z };
+      });
+      // tapetes numa malha só; o anel de luz de cada worker é separado porque muda de cor
+      model.add(new Mesh(modelGeometryAt('consumidor/celula', cells), mat('#414d5c')));
+      for (const c of cells) {
+        const pad = new Mesh(modelGeometry('consumidor/luz'), mat('#b4b4bb'));
+        pad.position.set(c.x, c.y, c.z);
         model.add(pad);
         workerPads.push(pad);
       }
+      arms = new ArmRig(cells, { base: mat('#ec7211'), arm: mat('#ec7211'), fore: mat('#545b64') }, TOKEN_H * 1.05 / NODE_SCALE);
+      model.add(...arms.meshes);
       pickables.push(body, base);
       labelY = 1.6;
       break;
@@ -283,5 +275,5 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
   model.add(labelObj);
 
   bakeTree(group);
-  return { node, group, pickables, label, spinners, workerPads, body: body!, baseColor: baseColor! };
+  return { node, group, pickables, label, spinners, workerPads, body: body!, baseColor: baseColor!, door, doorAt: -Infinity, arms };
 }

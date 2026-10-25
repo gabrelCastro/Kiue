@@ -30,6 +30,7 @@ Cada fase tem briefing, dica, objetivos medidos ao vivo, 3 estrelas (objetivos, 
 src/sim     motor de simulação determinístico (TS puro, sem three.js)
 src/game    fases, objetivos, validação do grafo, controller, save, glossário, "na vida real"
 src/render  cena three.js: peças, conexões, mensagens (InstancedMesh), efeitos
+models/     produtor, fila e consumidor modelados em OpenSCAD (ver "Modelos 3D")
 src/ui      interface Preact
 src/auth    estado de login no navegador (AuthStore); src/api: cliente HTTP
 src/account sincronização do progresso e sandboxes salvos com a conta
@@ -62,6 +63,10 @@ No renderer: cena desenhada só quando algo muda (montando, pausado ou no result
 
 `tests/perf/golden.test.ts` guarda uma impressão digital do stream de eventos de todas as fases e de cenários de carga: uma otimização que mude qualquer resultado quebra o teste.
 
+### Modelos 3D
+
+Produtor, fila e consumidor são modelados à mão em OpenSCAD (`models/*.scad`, 1 unidade do jogo = 100 mm, Z para cima, frente em −Y). Cada material é uma parte separada (`parte = "corpo"`, `"detalhe"`…), para o jogo dar a cor e trocá-la em tempo de jogo; as partes móveis (portão da doca, célula e articulações dos braços robóticos) saem na própria origem. `node scripts/models.mjs` exporta as partes, une os vértices e grava `src/render/models.gen.ts` (posições Int16 + índices em base64, ~5 mil triângulos no total). O arquivo gerado vai para o repositório, então o build não precisa do OpenSCAD; rode o script de novo depois de mudar um `.scad`. `src/render/models.ts` converte os eixos e calcula as normais (quinas vivas acima de 35°). O produtor é uma doca de expedição (o portão enrola a cada mensagem enviada) e o consumidor, uma bancada de triagem com um braço robótico por worker: `render/robots.ts` move os braços conforme o estado do worker (trabalhando, buscando mensagens, ocioso, desligado, caído), com um InstancedMesh por parte. Vidro e esteira da fila, pedestais, tópico e Lambda continuam montados no código (`render/nodes.ts`).
+
 ### Adicionar uma fase
 
 Fases são dados: grafo inicial, paleta, conceitos liberados no inspetor, objetivos, metas de estrela, lições, quiz e uma função `solve` com a solução de referência (`defineLevel` a executa e guarda o grafo da solução, então a fase pronta é só JSON). Título e conceito de todas ficam no catálogo público `src/game/level-catalog.ts`; o conteúdo das fases 1, 2 e do sandbox fica em `src/game/levels.ts` (vai no bundle) e o das outras 20 em `content/levels.ts` (só o servidor carrega). O teste `tests/game/levels.test.ts` garante automaticamente que o estado inicial falha e que a solução vence com 3 estrelas.
@@ -77,6 +82,7 @@ Fases são dados: grafo inicial, paleta, conceitos liberados no inspetor, objeti
 | `npm run check` | typecheck + testes + build + e2e |
 | `npm run build` | gera o site estático em `dist/` |
 | `npm run bench` | mede o simulador (fases e cenários de carga) |
+| `node scripts/models.mjs` | regenera `src/render/models.gen.ts` a partir de `models/*.scad` (precisa do `openscad`) |
 | `npm run bench:render` | mede o custo por frame no navegador com um sandbox pesado (`LEVEL=c12` mede uma fase real) |
 
 ## Contas (back-end)

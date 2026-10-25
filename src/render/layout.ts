@@ -62,12 +62,26 @@ export function lambdaSlot(n: GraphNode, j: number, count: number, out: Vector3)
   out.set(n.x + Math.cos(a) * r, 1.1, n.z + Math.sin(a) * r);
 }
 
-/** Posição do "slot" de um worker sobre o consumidor. */
-export function workerSlot(n: GraphNode, j: number, count: number, out: Vector3): void {
+/** Altura do tampo da bancada do consumidor acima do pedestal (antes do NODE_SCALE). */
+export const BENCH_TOP = 0.4;
+/** Passo da grade de células da bancada (até 3 × 3), antes do NODE_SCALE. */
+const CELL = 0.45;
+/** Onde a caixa pousa dentro da célula: à frente e à direita do centro (o braço fica no canto oposto). */
+export const BOX_SPOT = 0.05;
+
+/** Centro da célula do worker `j` na bancada, relativo à peça e antes do NODE_SCALE. */
+export function workerCell(j: number, count: number): { x: number; z: number } {
   const perRow = Math.min(3, count);
-  const row = Math.floor(j / 3);
-  const col = j % 3;
   const rows = Math.ceil(count / 3);
-  const s = 0.45 * NODE_SCALE;
-  out.set(n.x + (col - (perRow - 1) / 2) * s, (LIFT + 1.0) * NODE_SCALE, n.z + (row - (rows - 1) / 2) * s);
+  return { x: ((j % 3) - (perRow - 1) / 2) * CELL, z: (Math.floor(j / 3) - (rows - 1) / 2) * CELL };
+}
+
+/** Posição da mensagem em processamento: pousada no tapete da célula do worker. */
+export function workerSlot(n: GraphNode, j: number, count: number, out: Vector3): void {
+  const c = workerCell(j, count);
+  out.set(
+    n.x + (c.x + BOX_SPOT) * NODE_SCALE,
+    (LIFT + BENCH_TOP + 0.01) * NODE_SCALE + (TOKEN_H * 1.05) / 2,
+    n.z + (c.z + BOX_SPOT) * NODE_SCALE,
+  );
 }
