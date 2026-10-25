@@ -465,12 +465,51 @@ function TouchActions() {
   );
 }
 
+/**
+ * No celular a fase ocupa a tela exata (100dvh) e a barra de cima precisa ficar sempre visível.
+ * Dois jeitos de ela sumir: (1) o teclado virtual, ao editar um campo do inspetor, rola a página
+ * para mostrar o campo e o navegador (sobretudo o Safari do iPhone) nem sempre desfaz a rolagem
+ * quando o teclado fecha; (2) zoom de página com pinça ou toque duplo fora do palco, bloqueado no
+ * CSS (`touch-action` em `.compact-level`). Aqui a página volta ao topo quando o foco sai de um
+ * campo e quando a área visível volta ao tamanho cheio.
+ */
+function usePinnedViewport() {
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('pinned-viewport');
+    const reset = () => {
+      if (window.scrollY !== 0 || window.scrollX !== 0) window.scrollTo(0, 0);
+      // o próprio #app também pode ter sido rolado pelo foco (overflow escondido ainda rola)
+      const app = document.getElementById('app');
+      if (app && app.scrollTop) app.scrollTop = 0;
+    };
+    const onFocusOut = (e: FocusEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.('input, select, textarea')) setTimeout(reset, 50);
+    };
+    const vv = window.visualViewport;
+    const onViewport = () => {
+      // teclado fechou: a área visível voltou à altura da janela
+      if (vv && vv.height >= window.innerHeight - 1) reset();
+    };
+    document.addEventListener('focusout', onFocusOut);
+    vv?.addEventListener('resize', onViewport);
+    window.addEventListener('scroll', onViewport, { passive: true });
+    return () => {
+      root.classList.remove('pinned-viewport');
+      document.removeEventListener('focusout', onFocusOut);
+      vv?.removeEventListener('resize', onViewport);
+      window.removeEventListener('scroll', onViewport);
+    };
+  }, []);
+}
+
 type SheetTab = 'montar' | 'missao' | 'metricas' | 'peca';
 type SheetSize = 'peek' | 'half' | 'full';
 
 function CompactLevel() {
   const ctrl = useController();
   const level = ctrl.level!;
+  usePinnedViewport();
   return (
     <div class="level-screen compact-level">
       <CompactTopBar />

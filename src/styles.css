@@ -2039,6 +2039,16 @@ body {
 .compact-level .legend {
   display: none;
 }
+/* sem zoom de página (pinça ou toque duplo) na fase: a pinça já é da câmera no palco e, ampliada,
+   a página escondia a barra de cima sem jeito fácil de voltar. Rolar os painéis continua valendo. */
+.compact-level {
+  touch-action: pan-x pan-y;
+}
+/* a página não rola por baixo da fase (o teclado virtual empurrava a barra de cima para fora) */
+html.pinned-viewport,
+html.pinned-viewport body {
+  overflow: hidden;
+}
 .topbar.compact {
   position: relative;
   flex-wrap: nowrap;
