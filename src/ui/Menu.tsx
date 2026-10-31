@@ -322,7 +322,8 @@ const NARROW = '(max-width: 760px)';
 
 /**
  * Animação da tela inicial (render/showcase.ts): produtor → fila → consumidor com as peças do
- * jogo. three.js chega num chunk separado; até lá, o palco mostra só o fundo.
+ * jogo. three.js chega num chunk separado; até lá (ou se a cena não puder ser montada), o palco
+ * mostra uma imagem parada da mesma cena (public/hero-poster.webp).
  */
 function Showcase() {
   const ref = useRef<HTMLDivElement>(null);
@@ -336,11 +337,13 @@ function Showcase() {
     import('../render/showcase')
       .then((m) => {
         if (cancelled) return;
-        dispose = m.mountShowcase(el, { frame: () => (narrow.matches ? 1 : 0.6) });
+        dispose = m.mountShowcase(el, { frame: () => (narrow.matches ? 1 : 0.6), onLost: () => setReady(false) });
         setReady(true);
       })
-      .catch(() => {
-        // sem WebGL ou falha ao baixar: o palco fica só com o fundo
+      .catch((err: unknown) => {
+        // sem WebGL, bloqueado por alguma proteção do navegador ou falha ao baixar: fica a imagem
+        // parada da cena (fundo do palco). O erro vai para o console para dar para diagnosticar.
+        console.error('Kiuê: a animação da tela inicial não pôde ser montada; mostrando a imagem parada.', err);
       });
     return () => {
       cancelled = true;

@@ -61,16 +61,37 @@ const ease = (p: number) => (p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) /
 export interface ShowcaseOptions {
   /** Fração da largura (à direita) onde a cena deve caber; o resto fica para o texto. */
   frame: () => number;
+  /** O navegador perdeu o contexto WebGL depois de montar: a página volta para a imagem parada. */
+  onLost?: () => void;
+}
+
+/**
+ * Alguns navegadores recusam o contexto com antialias (aceleração desligada, proteções contra
+ * fingerprinting, GPU na lista de bloqueio): tenta de novo com o pedido mais modesto possível.
+ */
+function createRenderer(): WebGLRenderer {
+  try {
+    return new WebGLRenderer({ antialias: true });
+  } catch (first) {
+    console.warn('Kiuê: WebGL com antialias indisponível, tentando sem.', first);
+    return new WebGLRenderer({ antialias: false, powerPreference: 'low-power', failIfMajorPerformanceCaveat: false });
+  }
 }
 
 /** Monta a vitrine em `container` e devolve a função que a desmonta. */
 export function mountShowcase(container: HTMLElement, opts: ShowcaseOptions): () => void {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const renderer = new WebGLRenderer({ antialias: true, alpha: false });
+  const renderer = createRenderer();
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.toneMapping = NeutralToneMapping;
   container.appendChild(renderer.domElement);
+  const onContextLost = (e: Event) => {
+    e.preventDefault();
+    console.warn('Kiuê: o navegador perdeu o contexto WebGL da animação da tela inicial.');
+    opts.onLost?.();
+  };
+  renderer.domElement.addEventListener('webglcontextlost', onContextLost);
   const labels = new CSS2DRenderer();
   labels.domElement.className = 'label-layer';
   container.appendChild(labels.domElement);
@@ -384,6 +405,7 @@ export function mountShowcase(container: HTMLElement, opts: ShowcaseOptions): ()
     io.disconnect();
     ro.disconnect();
     document.removeEventListener('visibilitychange', sync);
+    renderer.domElement.removeEventListener('webglcontextlost', onContextLost);
     effects.clear();
     // texturas de esteira, canos, fundo e sombras são compartilhadas com o jogo: ficam
     scene.traverse((o) => {

@@ -1682,13 +1682,33 @@ details p {
 .hero-stage {
   position: absolute;
   inset: 0;
+}
+/* a imagem parada da cena fica por baixo: aparece enquanto o 3D carrega e se ele não puder rodar.
+   As bordas esmaecem para ela se fundir ao fundo do cartão. */
+.hero-stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('/hero-poster.webp') right 24px center / auto 96% no-repeat;
+  -webkit-mask-image: radial-gradient(ellipse 48% 50% at 72% 50%, #000 70%, transparent 100%);
+  mask-image: radial-gradient(ellipse 48% 50% at 72% 50%, #000 70%, transparent 100%);
+  pointer-events: none;
+}
+.hero-stage.ready::before {
   opacity: 0;
   transition: opacity 0.6s ease;
 }
-.hero-stage.ready {
+.hero-stage canvas,
+.hero-stage .label-layer {
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+.hero-stage.ready canvas,
+.hero-stage.ready .label-layer {
   opacity: 1;
 }
 .hero-stage canvas {
+  position: relative;
   display: block;
   width: 100%;
   height: 100%;
@@ -1743,6 +1763,12 @@ details p {
     position: relative;
     inset: auto;
     height: 240px;
+  }
+  .hero-stage::before {
+    background-position: center;
+    background-size: 100% auto;
+    -webkit-mask-image: radial-gradient(ellipse 52% 50% at 50% 50%, #000 75%, transparent 100%);
+    mask-image: radial-gradient(ellipse 52% 50% at 50% 50%, #000 75%, transparent 100%);
   }
   .hero-copy {
     max-width: none;
