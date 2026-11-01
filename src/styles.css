@@ -2773,3 +2773,223 @@ html.pinned-viewport body {
   margin-right: 4px;
   vertical-align: -1px;
 }
+
+/* ───────── home de vidro ─────────
+ * Painéis translúcidos sobre um fundo de luzes coloridas: o que está atrás aparece borrado e mais
+ * saturado através do vidro. Peças do vidro: translucidez + desfoque (backdrop-filter), borda de luz
+ * (mais clara em cima), reflexo diagonal e sombra difusa tingida.
+ * Só na home: dentro da fase as superfícies continuam sólidas, porque lá é preciso ler números.
+ * O desfoque fica só nos painéis grandes (barra, destaque, trilhas): é o que custa no celular.
+ */
+.menu-shell {
+  --glass: rgba(255, 255, 255, 0.58);
+  --glass-strong: rgba(255, 255, 255, 0.8);
+  --glass-solid: rgba(255, 255, 255, 0.9);
+  --glass-blur: blur(22px) saturate(170%);
+  --glass-edge: rgba(255, 255, 255, 0.75);
+  --glass-line: rgba(var(--shadow-ink), 0.07);
+  --glass-shine: linear-gradient(135deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.12) 32%, rgba(255, 255, 255, 0) 55%);
+  --glass-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(var(--shadow-ink), 0.04),
+    0 1px 2px rgba(26, 50, 54, 0.06),
+    0 12px 36px -8px rgba(26, 50, 54, 0.18);
+  position: relative;
+  isolation: isolate;
+}
+/* luzes coloridas atrás do vidro: manchas grandes e suaves nas cores da paleta, presas à tela */
+.menu-shell::before {
+  content: '';
+  position: fixed;
+  inset: -10%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(38% 42% at 12% 18%, rgba(52, 191, 215, 0.55), transparent 70%),
+    radial-gradient(34% 40% at 88% 30%, rgba(214, 51, 124, 0.42), transparent 70%),
+    radial-gradient(36% 38% at 22% 82%, rgba(214, 197, 51, 0.5), transparent 70%),
+    radial-gradient(42% 46% at 82% 86%, rgba(74, 121, 129, 0.5), transparent 72%),
+    radial-gradient(30% 30% at 52% 52%, rgba(52, 191, 215, 0.18), transparent 70%),
+    var(--neutro-50);
+}
+/* deriva bem lenta das luzes, só em tela grande e para quem não pediu menos movimento */
+@media (min-width: 900px) and (prefers-reduced-motion: no-preference) {
+  .menu-shell::before {
+    animation: glass-drift 40s ease-in-out infinite alternate;
+  }
+}
+@keyframes glass-drift {
+  from {
+    transform: translate3d(-2%, -1%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(2%, 2%, 0) scale(1.06);
+  }
+}
+
+/* painel de vidro: o mesmo material para a barra, o destaque, as trilhas e os avisos */
+.menu-shell .console-nav,
+.menu-hero,
+.menu .track,
+.continue-card,
+.guest-banner {
+  background-color: var(--glass);
+  background-image: var(--glass-shine);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-shadow);
+}
+
+/* barra: fixa no topo, o conteúdo passa borrado por baixo */
+.menu-shell .console-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background-color: rgba(255, 255, 255, 0.72);
+  background-image: none;
+  border-width: 0 0 1px;
+  border-bottom-color: var(--glass-line);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.6);
+}
+.menu-shell .console-nav .btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+/* destaque: a cena 3D flutua no vidro, com as bordas se dissolvendo nele */
+.menu-hero {
+  border-radius: 24px;
+  background-color: rgba(255, 255, 255, 0.6);
+}
+.menu-hero .hero-stage {
+  -webkit-mask-image: radial-gradient(ellipse 56% 64% at 70% 50%, #000 62%, transparent 100%);
+  mask-image: radial-gradient(ellipse 56% 64% at 70% 50%, #000 62%, transparent 100%);
+}
+.hero-copy {
+  background: none;
+}
+.hero-kicker {
+  color: var(--petroleo-700);
+}
+@media (max-width: 760px) {
+  .menu-hero .hero-stage {
+    -webkit-mask-image: radial-gradient(ellipse 62% 60% at 50% 50%, #000 60%, transparent 100%);
+    mask-image: radial-gradient(ellipse 62% 60% at 50% 50%, #000 60%, transparent 100%);
+  }
+  .hero-copy {
+    background: none;
+    border-top: 0;
+  }
+}
+
+/* trilhas: vidro; os cartões das fases ficam quase opacos, porque têm texto pequeno */
+.menu .track {
+  border-radius: 24px;
+}
+.menu .level-card {
+  background: var(--glass-solid);
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 2px rgba(var(--shadow-ink), 0.05);
+}
+.menu .level-card:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: var(--accent);
+}
+.menu .level-card.done {
+  background: rgba(240, 251, 241, 0.9);
+  border-color: var(--ok-line);
+}
+.menu .level-card.next {
+  background: #ffffff;
+  border-color: var(--highlight);
+  /* sombra curta: a trilha rola na horizontal e cortaria um brilho maior */
+  box-shadow: 0 4px 14px -4px rgba(214, 51, 124, 0.4);
+}
+/* 0,7: o texto cinza (--muted) ainda passa de 4,5:1 com a luz mais forte atrás */
+.menu .level-card.locked {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.7);
+}
+.menu .level-card.locked .concept-tag {
+  border-color: var(--glass-line);
+}
+.menu .track-bar {
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 0 0 1px var(--glass-line);
+}
+.menu .track-badge {
+  background: rgba(255, 255, 255, 0.8);
+}
+.menu .track-certificacao .track-badge {
+  background: var(--petroleo-700);
+}
+.menu .trail-dot {
+  background: rgba(255, 255, 255, 0.85);
+}
+.menu .is-done .trail-dot {
+  background: var(--ok-fill);
+}
+.menu .is-next .trail-dot {
+  background: var(--highlight-fill);
+}
+
+/* "continue de onde parou": vidro com um brilho magenta atrás */
+.continue-card {
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  background-color: rgba(255, 255, 255, 0.66);
+  box-shadow:
+    var(--glass-shadow),
+    0 0 0 2px var(--highlight),
+    0 16px 48px -10px rgba(214, 51, 124, 0.45);
+}
+
+.guest-banner {
+  border-radius: 16px;
+  background-color: rgba(255, 255, 255, 0.62);
+  border-left: 4px solid var(--accent);
+}
+
+/* botões secundários da home: vidro leve (sem desfoque próprio; já estão sobre vidro) */
+.menu .btn:not(.primary):not(.linklike) {
+  background: rgba(255, 255, 255, 0.6);
+}
+.menu .btn:not(.primary):not(.linklike):hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.menu .sandbox-card {
+  background: var(--glass-solid);
+  border-color: rgba(255, 255, 255, 0.9);
+}
+
+/* sem suporte a desfoque ou para quem pediu menos transparência: o vidro fica fosco de verdade */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .menu-shell {
+    --glass: rgba(255, 255, 255, 0.9);
+  }
+  .menu-shell .console-nav,
+  .menu-hero,
+  .continue-card,
+  .guest-banner {
+    background-color: rgba(255, 255, 255, 0.92);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .menu-shell {
+    --glass: #ffffff;
+    --glass-strong: #ffffff;
+    --glass-solid: #ffffff;
+  }
+  .menu-shell::before {
+    opacity: 0.35;
+  }
+  .menu-shell .console-nav,
+  .menu-hero,
+  .menu .track,
+  .continue-card,
+  .guest-banner {
+    background-color: #ffffff;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
