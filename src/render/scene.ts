@@ -37,10 +37,10 @@ import { BUILD_LIMIT, type Controller } from '../game/controller';
 import { FOOTPRINT } from '../game/footprint';
 import { dlqIds } from '../game/graph';
 import { describeFilterPolicy } from '../sim/filter';
-import type { Simulation } from '../sim/engine';
+import { LAMBDA_START_CONCURRENCY, lambdaCap, type Simulation } from '../sim/engine';
 import type { GraphNode, SimEvent, Token } from '../sim/types';
 import { Effects } from './effects';
-import { dlqCurve, edgeCurve, lambdaSlot, NODE_SCALE, QUEUE_DEPTH, QUEUE_LEN, queueSlot, TOKEN_H, workerSlot } from './layout';
+import { dlqCurve, edgeCurve, LAMBDA_BATCH_SCALE, LAMBDA_DECK_H, lambdaSlot, NODE_SCALE, QUEUE_DEPTH, QUEUE_LEN, queueSlot, TOKEN_H, workerSlot } from './layout';
 import { backdropTexture, beltTexture, flowTexture, GROUND_TILE, groundTexture } from './textures';
 import { bakedMaterial, bakeGeometry, bakeTree } from './bake';
 import { buildNode, DOOR_OPEN, NODE_COLORS, type NodeView } from './nodes';
@@ -49,8 +49,14 @@ import { describeNode } from './labels';
 const MAX_TOKENS = 4000;
 const DIM_COLOR = new Color('#d1d5db');
 const BAR_COLOR = new Color('#3d3d3d');
+/** Barra de timeout da invocação da Lambda: folga, perto do limite, quase estourando. */
+const TIMEOUT_OK = new Color('#29ad32');
+const TIMEOUT_WARN = new Color('#f2b200');
+const TIMEOUT_BAD = new Color('#d91515');
 /** Cores dos pads de worker por estado (pré-calculadas: o frame não interpreta strings). */
 const PAD = {
+  /** Lambda: instância iniciando (cold start). */
+  cold: new Color('#7dd3fc'),
   down: new Color('#d91515'),
   busy: new Color('#29ad32'),
   polling: new Color('#0099ff'),
@@ -576,6 +582,25 @@ export class SceneView {
       obj.position.set(n.x + QUEUE_LEN / 2 + 0.3, mid.y + 0.1, mid.z);
       this.world.add(obj);
     }
+    // destino de falha da Lambda acionada pelo SNS (invocação assíncrona): linha tracejada como a da DLQ
+    for (const n of g.nodes) {
+      if (n.kind !== 'lambda') continue;
+      const destId = (n as GraphNode<'lambda'>).config.onFailure;
+      const dest = destId ? this.nodeViews.get(destId)?.node : undefined;
+      if (!dest) continue;
+      const curve = dlqCurve(n, dest);
+      this.curves.set(`dlq:${n.id}->${dest.id}`, curve);
+      const line = new Line(new BufferGeometry().setFromPoints(curve.getPoints(40)), new LineDashedMaterial({ color: NODE_COLORS.dlq, dashSize: 0.25, gapSize: 0.15 }));
+      line.computeLineDistances();
+      this.world.add(line);
+      const div = document.createElement('div');
+      div.className = 'edge-label dlq';
+      this.edgeLabels.push(div);
+      div.textContent = '☠ destino de falha (após 2 novas tentativas)';
+      const obj = new CSS2DObject(div);
+      obj.position.copy(curve.getPoint(0.5)).add(new Vector3(0, 0.2, 0));
+      this.world.add(obj);
+    }
     this.labelTimer = 0;
     if (levelChanged) this.fitCamera();
   }
@@ -619,9 +644,11 @@ export class SceneView {
         const c = sim.consumers.get(v.node.id);
         c?.workers.forEach((w, j) => {
           const pad = v.workerPads[j];
-          if (!pad) return;
+          if (!pad && !v.station) return;
           const color =
-            w.state === 'down'
+            w.state === 'starting'
+              ? PAD.cold
+              : w.state === 'down'
               ? PAD.down
               : w.state === 'processing' || w.state === 'receiving'
                 ? w.failReason === 'db'
@@ -632,15 +659,27 @@ export class SceneView {
                   : j >= c.active
                     ? PAD.off
                     : PAD.idle;
-          (pad.material as MeshBasicMaterial).color.copy(color);
+          if (pad) (pad.material as MeshBasicMaterial).color.copy(color);
           v.arms?.setPose(j, color === PAD.down ? 'down' : color === PAD.busy ? 'work' : color === PAD.polling ? 'poll' : color === PAD.off ? 'off' : 'idle');
+          v.station?.setLight(j, color);
+          v.station?.setBusy(j, w.state === 'processing' || w.state === 'receiving' || w.state === 'starting');
         });
+        v.station?.update(c?.active ?? 0, dt, t);
         const mat = v.body.material as MeshBasicMaterial;
         mat.color.copy(c?.down ? DOWN_BODY : this.hex(v.baseColor));
       } else if (isWorkerNode) {
         for (const pad of v.workerPads) (pad.material as MeshBasicMaterial).color.copy(v.node.kind === 'lambda' ? PAD.off : PAD.idle);
         (v.body.material as MeshBasicMaterial).color.copy(this.hex(v.baseColor));
         v.workerPads.forEach((_, j) => v.arms?.setPose(j, 'idle'));
+        if (v.station) {
+          // montando: as instâncias iniciais em pé, à espera
+          const cap = lambdaCap((v.node as GraphNode<'lambda'>).config);
+          for (let j = 0; j < cap; j++) {
+            v.station.setLight(j, j < LAMBDA_START_CONCURRENCY ? PAD.idle : PAD.off);
+            v.station.setBusy(j, false);
+          }
+          v.station.update(Math.min(LAMBDA_START_CONCURRENCY, cap), dt, t);
+        }
       }
       v.arms?.update(dt, t);
     }
@@ -808,10 +847,47 @@ export class SceneView {
     for (const c of sim.consumers.values()) {
       const view = this.nodeViews.get(c.node.id);
       if (!view) continue;
+      if (c.asyncQueue.length) {
+        // Lambda acionada pelo SNS: eventos na fila interna, empilhados na plataforma junto da
+        // entrada; os que esperam a nova tentativa ficam apagados
+        const h = TOKEN_H * LAMBDA_BATCH_SCALE;
+        c.asyncQueue.slice(0, 24).forEach((ev, k) => {
+          const col = k % 3;
+          const layer = Math.floor(k / 3);
+          this.tmp.set(view.node.x - 0.55 * NODE_SCALE, (LAMBDA_DECK_H + 0.005) * NODE_SCALE + h * (layer + 0.5) * 1.08, view.node.z + (col - 1) * 0.15);
+          put(this.tmp, ev.token, LAMBDA_BATCH_SCALE, 0, ev.at > now ? 0.55 : 0);
+        });
+      }
       c.workers.forEach((w, j) => {
-        if (w.state !== 'processing' || !w.batch.length) return;
-        if (c.lambda) lambdaSlot(view.node, j, c.workers.length, this.tmp);
-        else workerSlot(view.node, j, c.workers.length, this.tmp);
+        if ((w.state !== 'processing' && w.state !== 'starting') || !w.batch.length) return;
+        if (c.lambda) {
+          // Lambda: o lote inteiro empilhado na bandeja do robô; a pilha baixa conforme ele processa.
+          // A barra é o tempo da invocação contra o timeout da função (verde → âmbar → vermelho).
+          lambdaSlot(view.node, j, c.workers.length, this.tmp);
+          const h = TOKEN_H * LAMBDA_BATCH_SCALE;
+          const left = w.batch.length - w.index;
+          for (let k = 0; k < left; k++) {
+            const pos = this.tmp2.copy(this.tmp);
+            pos.y += h * (k + 0.5) * 1.08;
+            put(pos, w.batch[w.index + k].token, LAMBDA_BATCH_SCALE, k === 0 ? now * 0.006 : 0);
+          }
+          if (b < MAX_BARS) {
+            // iniciando (cold start): a barra azul é a inicialização; depois, o timeout da função
+            const starting = w.state === 'starting';
+            const prog = starting
+              ? Math.min(1, (now - w.start) / Math.max(1, w.until - w.start))
+              : Math.min(1, (now - w.invocationStart) / Math.max(1, c.lambda.timeout * 1000));
+            d.position.set(this.tmp.x - 0.15 + prog * 0.15, this.tmp.y + h * left * 1.08 + 0.12, this.tmp.z);
+            d.rotation.set(0, 0, 0);
+            d.scale.set(Math.max(0.01, prog * 0.3), 1, 1);
+            d.updateMatrix();
+            this.bars.setMatrixAt(b, d.matrix);
+            this.bars.setColorAt(b, starting ? PAD.cold : prog < 0.6 ? TIMEOUT_OK : prog < 0.85 ? TIMEOUT_WARN : TIMEOUT_BAD);
+            b++;
+          }
+          return;
+        }
+        workerSlot(view.node, j, c.workers.length, this.tmp);
         const current = w.batch[w.index];
         if (current) put(this.tmp, current.token, 1.05, now * 0.006);
         for (let k = w.index + 1; k < w.batch.length && k < w.index + 6; k++) {
@@ -905,13 +981,25 @@ export class SceneView {
       case 'invocation_failed':
         this.effects.spawn(
           at(e.node),
-          e.reason === 'db' ? '✗ banco recusou' : e.reason === 'timeout' ? '✗ timeout: lote volta' : `✗ lote de ${e.size} volta`,
+          e.reason === 'db' ? '✗ banco recusou' : e.async ? (e.reason === 'timeout' ? '✗ timeout' : '✗ falhou') : e.reason === 'timeout' ? '✗ timeout: lote volta' : `✗ lote de ${e.size} volta`,
           'bad',
           e.node + 'inv',
         );
         break;
       case 'scaled':
         this.effects.spawn(at(e.node), `concorrência ${e.concurrency}`, 'info', e.node + 'scale', 600);
+        break;
+      case 'cold_start':
+        this.effects.spawn(at(e.node), '❄ cold start', 'cold', e.node + 'cold', 500);
+        break;
+      case 'throttled':
+        this.effects.spawn(at(e.node), '✗ throttled', 'bad', e.node + 'throttle', 400);
+        break;
+      case 'lambda_retry':
+        this.effects.spawn(at(e.node), `↻ nova tentativa (${e.attempt}ª)`, 'warn', e.node + 'retry', 400);
+        break;
+      case 'lambda_on_failure':
+        this.effects.spawn(at(e.node), '☠ destino de falha', 'bad', e.node + 'onfail', 400);
         break;
       case 'visibility_extended':
         this.effects.spawn(at(e.node), '◷ +visibilidade', 'muted', e.node + 'hb', 600);

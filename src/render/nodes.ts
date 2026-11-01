@@ -13,13 +13,14 @@ import {
 } from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { lambdaCap } from '../sim/engine';
+import { LAMBDA_START_CONCURRENCY, lambdaCap } from '../sim/engine';
 import type { GraphNode } from '../sim/types';
 import { bakedMaterial, bakeTree } from './bake';
 import { modelGeometry, modelGeometryAt } from './models';
 import { beltTexture, contactShadowTexture } from './textures';
-import { BENCH_TOP, LAMBDA_RING, LIFT, NODE_SCALE, QUEUE_DEPTH, QUEUE_HEIGHT, QUEUE_LEN, TOKEN_H, workerCell } from './layout';
+import { BENCH_TOP, LAMBDA_DECK_H, LIFT, NODE_SCALE, QUEUE_DEPTH, QUEUE_HEIGHT, QUEUE_LEN, TOKEN_H, workerCell } from './layout';
 import { ArmRig } from './robots';
+import { LambdaStation } from './station';
 
 export const NODE_COLORS = {
   // paleta dos ícones de arquitetura da AWS (mesmas cores de styles.css)
@@ -74,6 +75,8 @@ export interface NodeView {
   doorAt: number;
   /** Braços robóticos do consumidor, um por worker. */
   arms?: ArmRig;
+  /** Estação da Lambda: um robô por instância, que sobe quando ela escala. */
+  station?: LambdaStation;
 }
 
 /**
@@ -133,6 +136,7 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
   let body: Mesh;
   let door: Object3D | undefined;
   let arms: ArmRig | undefined;
+  let station: LambdaStation | undefined;
   let baseColor: string;
   let labelY: number;
   const lift = LIFT;
@@ -237,30 +241,26 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
       break;
     }
     case 'lambda': {
+      // estação de robôs sob demanda (models/lambda.scad, render/station.ts)
       baseColor = NODE_COLORS.lambda;
       contactShadow(model, 2.0, 2.0);
-      const base = new Mesh(new CylinderGeometry(0.98, 1.02, 0.14, 6), mat(shade(baseColor, 0.86), { flatShading: true, roughness: 0.8, metalness: 0 }));
-      base.position.y = 0.09;
-      const glow = new Mesh(new CylinderGeometry(1.04, 1.04, 0.03, 6), new MeshBasicMaterial({ color: shade(baseColor, 0.35) }));
-      glow.position.y = 0.02;
-      body = new Mesh(new CylinderGeometry(0.75, 0.8, 0.75, 6), mat(baseColor, { flatShading: true }));
-      body.position.y = lift + 0.375;
-      const top = new Mesh(new CylinderGeometry(0.62, 0.75, 0.08, 6), mat(shade(baseColor, 0.3), { flatShading: true }));
-      top.position.y = lift + 0.79;
-      const glyph = new Mesh(new PlaneGeometry(0.85, 0.85), new MeshBasicMaterial({ map: lambdaGlyph(), transparent: true, depthWrite: false }));
+      const deck = new Mesh(modelGeometry('lambda/deck'), mat('#d5dbdb'));
+      body = new Mesh(modelGeometry('lambda/hub'), mat(baseColor, { flatShading: true }));
+      const glyph = new Mesh(new PlaneGeometry(0.66, 0.66), new MeshBasicMaterial({ map: lambdaGlyph(), transparent: true, depthWrite: false }));
       glyph.rotation.x = -Math.PI / 2;
-      glyph.position.y = lift + 0.84;
-      model.add(glow, base, body, top, glyph);
-      const slots = lambdaCap((node as GraphNode<'lambda'>).config);
-      for (let j = 0; j < slots; j++) {
-        const a = (j / slots) * Math.PI * 2 - Math.PI / 2;
-        const pad = new Mesh(new CylinderGeometry(0.09, 0.09, 0.05, 12), mat('#d1d5db'));
-        pad.position.set(Math.cos(a) * LAMBDA_RING, 0.03, Math.sin(a) * LAMBDA_RING);
-        model.add(pad);
-        workerPads.push(pad);
-      }
-      pickables.push(body, base);
-      labelY = 1.55;
+      glyph.position.y = LAMBDA_DECK_H + 0.4 + 0.004;
+      station = new LambdaStation(lambdaCap((node as GraphNode<'lambda'>).config), {
+        bay: mat('#414d5c'),
+        lock: mat('#9aa3ab'),
+        light: bakedMaterial('#ffffff'),
+        body: mat('#f4f5f7'),
+        stripe: mat(baseColor),
+        detail: mat('#2b3036'),
+      });
+      station.update(LAMBDA_START_CONCURRENCY, 0, 0);
+      model.add(deck, body, new Mesh(modelGeometry('lambda/hub_detalhe'), mat('#2b3036')), glyph, ...station.objects);
+      pickables.push(body, deck);
+      labelY = 1.0;
       break;
     }
   }
@@ -275,5 +275,5 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
   model.add(labelObj);
 
   bakeTree(group);
-  return { node, group, pickables, label, spinners, workerPads, body: body!, baseColor: baseColor!, door, doorAt: -Infinity, arms };
+  return { node, group, pickables, label, spinners, workerPads, body: body!, baseColor: baseColor!, door, doorAt: -Infinity, arms, station };
 }

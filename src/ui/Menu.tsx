@@ -108,7 +108,7 @@ function GuestBanner() {
         <b>Você está jogando como visitante.</b>{' '}
         {a.status === 'offline'
           ? 'O servidor de contas está fora do ar: as fases 1 e 2 e o sandbox limitado continuam abertos.'
-          : 'As fases 1 e 2 e um sandbox limitado são abertos. Crie uma conta grátis para liberar as 22 fases e o sandbox completo.'}
+          : `As fases 1 e 2 e um sandbox limitado são abertos. Crie uma conta grátis para liberar as ${CATALOG.length} fases e o sandbox completo.`}
       </div>
       {a.status === 'guest' && (
         <div class="row gap">

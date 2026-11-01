@@ -1,3 +1,4 @@
+import { CATALOG } from '../../game/level-catalog';
 import { createContext, type ComponentChildren } from 'preact';
 import { useContext, useEffect, useId, useReducer, useRef, useState } from 'preact/hooks';
 import { ApiError } from '../../api/http';
@@ -113,7 +114,7 @@ function RegisterForm() {
       })}
     >
       <GoogleButton label="Continuar com o Google" />
-      {!auth.dialog?.reason && <p class="muted small auth-lead">Com a conta você libera as 22 fases e o sandbox completo, e seu progresso e seus sandboxes ficam salvos para jogar de qualquer computador. É grátis.</p>}
+      {!auth.dialog?.reason && <p class="muted small auth-lead">Com a conta você libera as {CATALOG.length} fases e o sandbox completo, e seu progresso e seus sandboxes ficam salvos para jogar de qualquer computador. É grátis.</p>}
       <Field label="Nome" error={f.fieldError('name')}>
         <TextInput type="text" autoComplete="name" maxLength={60} value={name} onValue={setName} autoFocus required />
       </Field>

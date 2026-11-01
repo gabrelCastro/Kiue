@@ -863,6 +863,134 @@ const c11 = defineLevel('c11', {
   stars: { p95: 3 },
 });
 
+const c13 = defineLevel('c13', {
+  story:
+    'Todo dia às 9h a loja abre com uma enxurrada de pedidos, e a Lambda que valida o carrinho acorda junto. Cada instância nova leva 2,5 s para iniciar (carregar o código e abrir as conexões) antes de atender o primeiro pedido. Nos primeiros segundos, os clientes ficam esperando.',
+  objective: 'Latência p95 de no máximo 2,5 s, sem perder nenhum pedido.',
+  hint: 'Configure provisioned concurrency na função: essas instâncias ficam iniciadas antes do pico e atendem sem cold start. A concorrência máxima é 10.',
+  lesson: [
+    'Cold start é a primeira invocação numa instância nova: antes do handler, o Lambda baixa o código e roda a inicialização (o que fica fora do handler).',
+    'A inicialização soma latência, mas não conta no timeout da função.',
+    'Provisioned concurrency mantém N instâncias já iniciadas numa versão ou alias. É cobrada por hora, mesmo sem invocações; o que passar dela escala sob demanda, com cold start.',
+    'Instâncias que ficam paradas são recicladas e esfriam: o próximo pico paga cold start de novo.',
+    'Outras formas de reduzir o cold start: pacote menor, menos dependências, inicialização preguiçosa e SnapStart (Java, Python, .NET).',
+  ],
+  quiz: [
+    {
+      question: 'O que a provisioned concurrency resolve?',
+      options: [
+        'Limita quantas invocações simultâneas a fila pode disparar',
+        'Mantém instâncias já iniciadas, eliminando o cold start nelas',
+        'Aumenta o timeout máximo da função',
+      ],
+      answer: 1,
+      explanation: 'Ela pré-inicia instâncias. Para limitar a concorrência disparada pela fila, o certo é MaximumConcurrency.',
+    },
+    {
+      question: 'O cold start conta no timeout da função?',
+      options: ['Sim, o timeout começa quando a instância é criada', 'Não: o timeout conta a execução do handler'],
+      answer: 1,
+      explanation: 'A fase de inicialização tem limite próprio (10 s); o timeout configurado vale para a execução do handler.',
+    },
+  ],
+  concepts: ['lambda', 'coldstart'],
+  palette: [],
+  graph: {
+    nodes: [
+      P('site', 'Site da loja', -8, 0, { rate: 2, total: 150, bursts: [{ at: 0, duration: 4, multiplier: 6 }] }),
+      Q('fila', 'fila-carrinho', -1, 0, { visibilityTimeout: 60 }),
+      L('fn', 'validar-carrinho', 6, 0, { batchSize: 1, maxConcurrency: 10, processingTime: 0.4, jitter: 0.2, timeout: 5, initTime: 2.5 }),
+    ],
+    edges: [E('site', 'fila', undefined, true), E('fila', 'fn', undefined, true)],
+  },
+  solve: (g) => configure<'lambda'>(g, 'fn', { provisioned: 10 }),
+  sim: { seed: 7, duration: 200 },
+  goals: [{ type: 'processedAll', consumer: 'fn' }, { type: 'maxP95', seconds: 2.5 }],
+  stars: { p95: 2.2 },
+});
+
+const c14 = defineLevel('c14', {
+  story:
+    'Cada clique no site vira um evento de analytics na fila, uns 3 por segundo. A Lambda que grava os eventos aceita lotes de 10, mas com eventos chegando pingados ela dispara uma invocação para quase cada um. A conta da Lambda chegou alta, e ninguém precisa desses números em menos de alguns segundos.',
+  objective: 'No máximo 60 invocações, com latência p95 de até 4 s.',
+  hint: 'Use a batching window (MaximumBatchingWindowInSeconds) do event source mapping: o poller espera alguns segundos para juntar um lote cheio antes de invocar. Janela demais só aumenta a espera.',
+  lesson: [
+    'Com fila SQS, o poller do Lambda invoca assim que tem mensagens; com tráfego pingado, isso vira lotes de 1 ou 2.',
+    'MaximumBatchingWindowInSeconds (0 a 300 s) faz o poller esperar até o lote encher (batch size ou 6 MB) ou a janela vencer.',
+    'Menos invocações: menos custo e menos carga em quem a função chama. Em troca, cada mensagem espera até a janela na fila.',
+    'Batch size acima de 10 em fila Standard exige batching window de pelo menos 1 s.',
+  ],
+  quiz: [
+    {
+      question: 'Com batch size 10 e batching window de 5 s, quando a Lambda é invocada?',
+      options: [
+        'Exatamente a cada 5 s',
+        'Quando juntar 10 mensagens ou quando a janela de 5 s vencer, o que vier primeiro',
+        'Só quando juntar 10 mensagens, sem limite de tempo',
+      ],
+      answer: 1,
+      explanation: 'A janela é um teto de espera: lote cheio (ou 6 MB) dispara antes.',
+    },
+  ],
+  concepts: ['lambda', 'batchwindow'],
+  palette: [],
+  graph: {
+    nodes: [
+      P('site', 'Site', -8, 0, { rate: 3, total: 300 }),
+      Q('fila', 'fila-eventos', -1, 0, { visibilityTimeout: 60 }),
+      L('fn', 'gravar-eventos', 6, 0, { batchSize: 10, maxConcurrency: 5, processingTime: 0.05, jitter: 0.2, timeout: 10 }),
+    ],
+    edges: [E('site', 'fila', undefined, true), E('fila', 'fn', undefined, true)],
+  },
+  solve: (g) => configure<'lambda'>(g, 'fn', { batchWindow: 2 }),
+  sim: { seed: 7, duration: 200 },
+  goals: [{ type: 'processedAll', consumer: 'fn' }, { type: 'maxInvocations', max: 60 }, { type: 'maxP95', seconds: 4 }],
+  stars: { p95: 3, apiCalls: 450 },
+});
+
+const c15 = defineLevel('c15', {
+  story:
+    'Todo pedido publicado no tópico "pedido-criado" dispara direto a Lambda que envia o e-mail de confirmação, sem fila no meio. Alguns pedidos chegam com o e-mail inválido e a função falha. Sem fila, ninguém guarda esses pedidos: depois de algumas tentativas, eles somem e o suporte nunca fica sabendo.',
+  objective: 'Os pedidos que falham não podem se perder: eles precisam ir para a fila "emails-com-falha".',
+  hint: 'Selecione a Lambda e escolha a fila "emails-com-falha" como destino em caso de falha (on-failure). Quando acabarem as novas tentativas, a Lambda manda o evento para lá.',
+  lesson: [
+    'O SNS invoca a Lambda de forma assíncrona: o evento entra numa fila interna da Lambda e o SNS considera a entrega feita.',
+    'Se a função falhar, a própria Lambda tenta de novo: até 2 vezes (configurável de 0 a 2), com intervalos crescentes, por até 6 horas.',
+    'Esgotadas as tentativas, o evento vai para o destino de falha (fila SQS, tópico SNS, outra função ou EventBridge), com o motivo do erro. Sem destino, é descartado.',
+    'Por isso a DLQ da assinatura SNS não ajuda aqui: para o SNS, a entrega à Lambda deu certo. Quem precisa do destino é a função.',
+    'Alternativa comum: SNS → SQS → Lambda. A fila guarda as mensagens, permite lotes e a DLQ dela pega as falhas.',
+  ],
+  quiz: [
+    {
+      question: 'O SNS invoca uma Lambda e a função falha em todas as tentativas. Onde configurar para não perder o evento?',
+      options: ['Na DLQ da assinatura SNS', 'No destino de falha (on-failure) da invocação assíncrona da função', 'No visibility timeout'],
+      answer: 1,
+      explanation: 'A entrega SNS → Lambda é aceita na hora (assíncrona). As falhas da função são tratadas pela Lambda: novas tentativas e, depois, o destino de falha.',
+    },
+    {
+      question: 'Quantas vezes a Lambda tenta de novo uma invocação assíncrona que falhou, por padrão?',
+      options: ['Nenhuma', '2 vezes', 'Até o evento ser processado'],
+      answer: 1,
+      explanation: 'O padrão (e o máximo) é 2 novas tentativas; dá para reduzir para 0 ou 1 com put-function-event-invoke-config.',
+    },
+  ],
+  concepts: ['onfailure'],
+  palette: [],
+  graph: {
+    nodes: [
+      P('loja', 'Loja', -8, 0, { rate: 3, total: 90, poisonRate: 0.1 }),
+      T('pedidos', 'pedido-criado', -2, 0),
+      L('fn', 'enviar-email', 4, 0, { processingTime: 0.3, timeout: 5 }),
+      Q('falhas', 'emails-com-falha', 4, 4),
+    ],
+    edges: [E('loja', 'pedidos', undefined, true), E('pedidos', 'fn', undefined, true)],
+  },
+  solve: (g) => configure<'lambda'>(g, 'fn', { onFailure: 'falhas' }),
+  sim: { seed: 9, duration: 200 },
+  goals: [{ type: 'processedAll', consumer: 'fn' }, { type: 'poisonToDlq' }],
+  stars: { p95: 2 },
+});
+
 const c12 = defineLevel('c12', {
   story:
     'A loja cresceu. Cada pedido (livro, eletrônico ou roupa) vai para três sistemas. Faturamento exige ordem por cliente e nenhuma cobrança duplicada. Estoque só cuida de eletrônicos e roupas. Analytics quer tudo. E ainda chegam pedidos venenosos.',
@@ -928,7 +1056,7 @@ const c12 = defineLevel('c12', {
 });
 
 /** Fases fechadas para visitantes, na ordem do catálogo. */
-export const CONTENT_LEVELS: Level[] = [l3, l4, l5, l6, l7, l8, l9, l10, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12];
+export const CONTENT_LEVELS: Level[] = [l3, l4, l5, l6, l7, l8, l9, l10, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c13, c14, c15, c12];
 
 const BY_ID = new Map([...FREE_LEVELS, ...CONTENT_LEVELS].map((l) => [l.id, l]));
 

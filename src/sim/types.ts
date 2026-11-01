@@ -75,6 +75,16 @@ export interface LambdaConfig {
   interest: string[] | null;
   reportBatchItemFailures: boolean;
   dbLimit: number; // conexões que o banco aguenta; 0 = sem limite
+  /** Cold start: segundos para iniciar uma instância nova antes da 1ª invocação (0 = não simula). */
+  initTime?: number;
+  /** Provisioned concurrency: instâncias já iniciadas, que nunca pagam cold start. */
+  provisioned?: number;
+  /** MaximumBatchingWindowInSeconds: espera até isso para juntar um lote cheio (0 = não espera). */
+  batchWindow?: number;
+  /** Invocação assíncrona (SNS → Lambda): fila SQS de destino quando as novas tentativas acabam. */
+  onFailure?: string | null;
+  /** Concorrência reservada da função (0 = sem reserva): acima disso a invocação é recusada (throttling). */
+  reserved?: number;
 }
 
 export interface ConfigByKind {
@@ -170,8 +180,12 @@ export type SimEvent =
   | { t: number; type: 'process_failed'; node: string; token: Token; reason: 'poison' | 'error' | 'outage' }
   | { t: number; type: 'empty_receive'; node: string }
   | { t: number; type: 'outage_start' | 'outage_end'; node: string }
-  | { t: number; type: 'invocation_failed'; node: string; reason: 'error' | 'timeout' | 'db'; size: number }
+  | { t: number; type: 'invocation_failed'; node: string; reason: 'error' | 'timeout' | 'db'; size: number; async?: true }
   | { t: number; type: 'scaled'; node: string; concurrency: number }
+  | { t: number; type: 'cold_start'; node: string; worker: number; ms: number }
+  | { t: number; type: 'lambda_retry'; node: string; token: Token; attempt: number }
+  | { t: number; type: 'throttled'; node: string; size: number }
+  | { t: number; type: 'lambda_on_failure'; node: string; dlq: string; token: Token }
   | { t: number; type: 'visibility_extended'; node: string; count: number }
   | { t: number; type: 'sns_retry'; node: string; target: string; token: Token; attempt: number }
   | { t: number; type: 'sns_dlq'; node: string; target: string; dlq: string; token: Token }
@@ -193,6 +207,8 @@ export function isRoutine(e: SimEvent): boolean {
     case 'processed':
     case 'empty_receive':
     case 'visibility_extended':
+    case 'cold_start':
+    case 'throttled':
       return true;
     default:
       return false;

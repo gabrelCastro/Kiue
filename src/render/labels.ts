@@ -98,11 +98,14 @@ export function describeNode(node: GraphNode, ctrl: Controller, sim: Simulation 
       badges.push(badge('Lambda', 'lambda'));
       if (cfg.reportBatchItemFailures) badges.push(badge('falha parcial', 'ok'));
       if (cfg.dbLimit > 0) badges.push(badge(`banco: ${cfg.dbLimit} conexões`, 'warn'));
+      if ((cfg.provisioned ?? 0) > 0) badges.push(badge(`${v(cfg.provisioned)} provisionadas`, 'ok'));
       const c = sim?.consumers.get(node.id);
       if (c && sim) {
         const done = sim.metrics.processedBy.get(node.id)?.size ?? 0;
         const busy = c.workers.filter((w) => w.state === 'processing' || w.state === 'receiving').length;
         lines.push(`✓ <b>${done}</b> · ${busy} invocações · conc. ${c.active}/${c.workers.length}`);
+        // acionada pelo SNS: eventos esperando na fila interna da Lambda (inclui novas tentativas)
+        if (c.source?.kind === 'topic' && c.asyncQueue.length) lines.push(`fila interna: ${c.asyncQueue.length} evento${c.asyncQueue.length === 1 ? '' : 's'}`);
       } else {
         lines.push(`lote ${v(cfg.batchSize)} · timeout ${v(cfg.timeout)}s · conc. máx. ${cfg.maxConcurrency > 0 ? v(cfg.maxConcurrency) : 'sem limite'}`);
       }

@@ -19,6 +19,20 @@ export type ApiName =
   | 'ChangeMessageVisibilityBatch';
 
 /** Métricas agregadas a partir do stream de eventos. */
+/** Uma invocação da Lambda que terminou (tempos em ms de simulação). */
+export interface InvocationRecord {
+  /** Instância (alçapão) que atendeu. */
+  worker: number;
+  /** Início da inicialização, se a invocação pagou cold start. */
+  initAt: number | null;
+  start: number;
+  end: number;
+  size: number;
+  outcome: 'ok' | 'partial' | 'error' | 'timeout' | 'db' | 'throttled';
+}
+
+const INVOCATION_LOG_MAX = 300;
+
 export class Metrics {
   produced = 0;
   sent = 0;
@@ -48,6 +62,19 @@ export class Metrics {
     ChangeMessageVisibilityBatch: 0,
   };
   invocations = 0;
+  /** Lambda: invocações que pagaram cold start (instância iniciando). */
+  coldStarts = 0;
+  /** Lambda: invocações recusadas por falta de concorrência reservada. */
+  throttles = 0;
+  /** Lambda: últimas invocações de cada função (para a linha do tempo do inspetor). */
+  readonly invocationLog = new Map<string, InvocationRecord[]>();
+
+  recordInvocation(node: string, r: InvocationRecord): void {
+    let log = this.invocationLog.get(node);
+    if (!log) this.invocationLog.set(node, (log = []));
+    log.push(r);
+    if (log.length > INVOCATION_LOG_MAX) log.splice(0, log.length - INVOCATION_LOG_MAX);
+  }
   invocationErrors = 0;
   dbOverloads = 0;
   peakConcurrency = new Map<string, number>();
@@ -122,6 +149,7 @@ export class Metrics {
       case 'wrong_delivery':
         this.wrongDelivery++;
         break;
+      case 'lambda_on_failure':
       case 'moved_to_dlq':
         this.movedToDlq++;
         this.dlqLogical.add(e.token.logicalId);

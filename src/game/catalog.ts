@@ -18,7 +18,10 @@ export type Concept =
   | 'heartbeat'
   | 'snsdlq'
   | 'groups'
-  | 'payload';
+  | 'payload'
+  | 'coldstart'
+  | 'batchwindow'
+  | 'onfailure';
 
 export const ALL_CONCEPTS: Concept[] = [
   'visibility',
@@ -39,6 +42,9 @@ export const ALL_CONCEPTS: Concept[] = [
   'snsdlq',
   'groups',
   'payload',
+  'coldstart',
+  'batchwindow',
+  'onfailure',
 ];
 
 export interface MessageType {

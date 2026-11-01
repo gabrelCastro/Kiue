@@ -32,7 +32,10 @@ export const CATALOG: readonly LevelMeta[] = [
   { id: 'c09', track: 'certificacao', index: 9, title: 'Webhook fora do ar', concept: 'Retries do SNS e DLQ da assinatura' },
   { id: 'c10', track: 'certificacao', index: 10, title: 'Um grupo só', concept: 'Paralelismo no FIFO' },
   { id: 'c11', track: 'certificacao', index: 11, title: 'Nota fiscal anexada', concept: 'Tamanho de mensagem' },
-  { id: 'c12', track: 'certificacao', index: 12, title: 'Exame final', concept: 'Tudo junto' },
+  { id: 'c13', track: 'certificacao', index: 12, title: 'Manhã fria', concept: 'Cold start e provisioned concurrency' },
+  { id: 'c14', track: 'certificacao', index: 13, title: 'Lotes de verdade', concept: 'Batching window' },
+  { id: 'c15', track: 'certificacao', index: 14, title: 'Sem fila no meio', concept: 'SNS → Lambda e destino de falha' },
+  { id: 'c12', track: 'certificacao', index: 15, title: 'Exame final', concept: 'Tudo junto' },
 ];
 
 export const SANDBOX_META: LevelMeta = { id: 'sandbox', track: 'sandbox', index: 0, title: 'Sandbox', concept: 'Livre' };

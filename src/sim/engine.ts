@@ -1,6 +1,6 @@
 import { matchesFilterPolicy } from './filter';
 import { Deque, RingBuffer } from './heap';
-import { Metrics, type ApiName } from './metrics';
+import { Metrics, type ApiName, type InvocationRecord } from './metrics';
 import { DEDUP_WINDOW_MS, SqsQueue, type QueueContext, type QueueMessage } from './queue';
 import { Rng } from './rng';
 import {
@@ -33,6 +33,11 @@ const LAMBDA_DB_REJECT_MS = 200;
 /** SNS → HTTP: retries de entrega (reduzidos para a escala do jogo). */
 export const SNS_RETRIES = 3;
 export const SNS_RETRY_MS = 5000;
+/** Invocação assíncrona: a Lambda tenta de novo 2 vezes (na AWS, depois de ~1 e ~2 min). */
+export const LAMBDA_ASYNC_RETRIES = 2;
+const LAMBDA_ASYNC_RETRY_MS = 3000;
+/** Throttling: espera antes de tentar de novo (poller do mapeamento ou fila interna). */
+const LAMBDA_THROTTLE_RETRY_MS = 1000;
 /** Limites de tamanho (KB) e bloco de cobrança. */
 export const SQS_MAX_KB = 1024;
 export const SNS_MAX_KB = 256;
@@ -84,7 +89,7 @@ export interface TopicState {
   dedup: Map<string, number>;
 }
 
-export type WorkerState = 'idle' | 'polling' | 'receiving' | 'processing' | 'down';
+export type WorkerState = 'idle' | 'polling' | 'receiving' | 'starting' | 'processing' | 'down';
 
 export interface BatchItem {
   token: Token;
@@ -93,6 +98,8 @@ export interface BatchItem {
   /** Entrega push vinda de uma assinatura SNS (falha → retry do SNS). */
   snsEdge?: GraphEdge;
   attempt?: number;
+  /** Evento de invocação assíncrona (SNS → Lambda): falha vira nova tentativa da própria Lambda. */
+  async?: boolean;
 }
 
 export interface Worker {
@@ -105,6 +112,10 @@ export interface Worker {
   /** Lambda: início da invocação e motivo de falha já decidido. */
   invocationStart: number;
   failReason: 'timeout' | 'db' | null;
+  /** Lambda: a instância já foi iniciada (sem cold start na próxima invocação). */
+  warm: boolean;
+  /** Lambda: início do cold start da invocação atual (null se a instância já estava quente). */
+  initAt: number | null;
 }
 
 /** Configuração comum a consumidores e Lambdas, como o motor a usa. */
@@ -130,6 +141,10 @@ export interface ConsumerState {
   active: number;
   lastScale: number;
   down: boolean;
+  /** Lambda com batching window: desde quando há mensagens esperando um lote cheio. */
+  gatherSince: number | null;
+  /** Lambda acionada pelo SNS (invocação assíncrona): fila interna de eventos, com as novas tentativas. */
+  asyncQueue: { token: Token; attempt: number; at: number }[];
   /** Consumidores que leem da mesma fila são instâncias do mesmo serviço e compartilham este estado. */
   service: ServiceState;
 }
@@ -144,7 +159,7 @@ export function lambdaCap(cfg: LambdaConfig): number {
 }
 
 function newWorker(): Worker {
-  return { state: 'idle', until: 0, start: 0, nextPollAt: 0, batch: [], index: 0, invocationStart: 0, failReason: null };
+  return { state: 'idle', until: 0, start: 0, nextPollAt: 0, batch: [], index: 0, invocationStart: 0, failReason: null, warm: false, initAt: null };
 }
 
 export class Simulation {
@@ -266,10 +281,13 @@ export class Simulation {
         },
         lambda: l,
         source,
-        workers: Array.from({ length: cap }, newWorker),
+        // provisioned concurrency: as primeiras instâncias já começam iniciadas
+        workers: Array.from({ length: cap }, (_, j) => ({ ...newWorker(), warm: j < (l.provisioned ?? 0) })),
         active,
         lastScale: 0,
         down: false,
+        gatherSince: null,
+        asyncQueue: [],
         service,
       };
     }
@@ -284,6 +302,8 @@ export class Simulation {
       active: workers,
       lastScale: 0,
       down: false,
+      gatherSince: null,
+      asyncQueue: [],
       service,
     };
   }
@@ -503,6 +523,9 @@ export class Simulation {
       } else if (target.kind === 'consumer') {
         const edge = t.edgeId ? this.edges.get(t.edgeId) : undefined;
         this.push(this.consumers.get(target.id)!, t.token, edge, t.attempt ?? 0);
+      } else if (target.kind === 'lambda') {
+        // SNS → Lambda: a Lambda aceita o evento na fila interna dela (o SNS não precisa tentar de novo)
+        this.consumers.get(target.id)?.asyncQueue.push({ token: t.token, attempt: 0, at: this.now });
       }
     }
   }
@@ -625,13 +648,15 @@ export class Simulation {
     if (c.down) return;
 
     const queue = c.source?.kind === 'queue' ? this.queues.get(c.source.id) : undefined;
-    if (c.lambda && queue) this.scaleLambda(c, queue);
+    if (c.lambda && queue) this.scaleLambda(c, queue.counts(this.now).visible);
+    if (c.lambda && c.source?.kind === 'topic') this.tickAsync(c);
     if (cfg.heartbeat && queue) this.heartbeat(c, queue);
+    const gathering = c.lambda && queue ? this.gathering(c, queue) : false;
 
     c.workers.forEach((w, j) => {
       switch (w.state) {
         case 'idle':
-          if (queue && j < c.active && this.now >= w.nextPollAt) {
+          if (queue && j < c.active && this.now >= w.nextPollAt && !gathering) {
             this.call('ReceiveMessage');
             const shortPoll = cfg.waitTime <= 0;
             const msgs = queue.receive(this.batchSize(cfg), c.node.id, this.ctx, shortPoll ? this.options.shortPollEmptyRate : 0);
@@ -646,7 +671,7 @@ export class Simulation {
           }
           break;
         case 'polling':
-          if (queue) {
+          if (queue && !gathering) {
             const msgs = queue.receive(this.batchSize(cfg), c.node.id, this.ctx, 0);
             if (msgs.length) this.startReceive(c, w, queue, msgs);
             else if (this.now >= w.until) {
@@ -658,31 +683,94 @@ export class Simulation {
           break;
         case 'receiving':
           if (this.now >= w.until) {
-            if (c.lambda) this.startInvocation(c, w);
+            if (c.lambda) this.startInvocation(c, w, j, queue);
             else this.startProcessing(c, w);
           }
           break;
+        case 'starting':
+          // cold start terminou: a instância está pronta e a invocação começa de fato
+          if (this.now >= w.until) this.beginInvocation(c, w);
+          break;
         case 'processing':
-          if (this.now >= w.until) this.finishItem(c, w, queue);
+          if (this.now >= w.until) this.finishItem(c, w, queue, j);
           break;
       }
     });
+  }
+
+  /**
+   * Batching window (MaximumBatchingWindowInSeconds): com mensagens visíveis mas menos que um lote
+   * cheio, o poller da Lambda espera até a janela vencer antes de invocar. Lote cheio não espera.
+   */
+  private gathering(c: ConsumerState, queue: SqsQueue): boolean {
+    const window = (c.lambda?.batchWindow ?? 0) * 1000;
+    if (window <= 0) return false;
+    const visible = queue.counts(this.now).visible;
+    if (visible === 0 || visible >= this.batchSize(c.cfg)) {
+      c.gatherSince = null;
+      return false;
+    }
+    if (c.gatherSince === null) c.gatherSince = this.now;
+    if (this.now - c.gatherSince < window) return true;
+    c.gatherSince = null;
+    return false;
   }
 
   private batchSize(cfg: RuntimeConsumer) {
     return Math.max(1, Math.min(10, Math.round(cfg.batchSize)));
   }
 
-  /** Lambda: sobe a concorrência enquanto houver fila; desce quando ela esvazia. */
-  private scaleLambda(c: ConsumerState, queue: SqsQueue) {
+  /**
+   * Invocação assíncrona (SNS → Lambda): cada evento é uma invocação com uma mensagem. A função
+   * escala com a fila interna; falha vira nova tentativa (ver asyncFailed).
+   */
+  private tickAsync(c: ConsumerState) {
+    const ready = () => c.asyncQueue.findIndex((e) => e.at <= this.now);
+    c.workers.forEach((w, j) => {
+      if (w.state !== 'idle' || j >= c.active) return;
+      const k = ready();
+      if (k < 0) return;
+      const [ev] = c.asyncQueue.splice(k, 1);
+      w.batch = [{ token: ev.token, receipt: null, ok: false, attempt: ev.attempt, async: true }];
+      w.index = 0;
+      this.startInvocation(c, w, j);
+    });
+    // escala pelo que sobrou esperando depois de distribuir aos workers livres
+    this.scaleLambda(c, c.asyncQueue.filter((e) => e.at <= this.now).length);
+  }
+
+  /** Invocação assíncrona falhou: a Lambda tenta de novo; esgotadas, vai para o destino de falha ou se perde. */
+  private asyncFailed(c: ConsumerState, item: BatchItem) {
+    const attempt = item.attempt ?? 0;
+    const id = c.node.id;
+    if (attempt < LAMBDA_ASYNC_RETRIES) {
+      this.emit({ t: this.now, type: 'lambda_retry', node: id, token: item.token, attempt: attempt + 1 });
+      c.asyncQueue.push({ token: item.token, attempt: attempt + 1, at: this.now + LAMBDA_ASYNC_RETRY_MS * (attempt + 1) });
+      return;
+    }
+    const dest = c.lambda?.onFailure;
+    if (dest && this.queues.has(dest)) {
+      this.emit({ t: this.now, type: 'lambda_on_failure', node: id, dlq: dest, token: item.token });
+      this.startTransit(item.token, id, dest, 'dlq', DELIVER_MS);
+      return;
+    }
+    this.emit({ t: this.now, type: 'dropped', node: id, token: item.token });
+  }
+
+  /** Lambda: sobe a concorrência enquanto houver backlog (fila ou eventos); desce quando ele acaba. */
+  private scaleLambda(c: ConsumerState, backlog: number) {
     const cap = c.workers.length;
     const floor = Math.min(LAMBDA_START_CONCURRENCY, cap);
-    const backlog = queue.counts(this.now).visible;
     const since = this.now - c.lastScale;
     let next = c.active;
     if (backlog > 0 && c.active < cap && since >= LAMBDA_SCALE_UP_MS) next++;
     else if (backlog === 0 && c.active > floor && since >= LAMBDA_SCALE_DOWN_MS) next--;
     if (next !== c.active) {
+      // instância reciclada esfria: se voltar a ser usada, paga cold start de novo
+      if (next < c.active) {
+        const w = c.workers[next];
+        if (next >= (c.lambda?.provisioned ?? 0)) w.warm = false;
+      }
       c.active = next;
       c.lastScale = this.now;
       this.emit({ t: this.now, type: 'scaled', node: c.node.id, concurrency: next });
@@ -716,10 +804,50 @@ export class Simulation {
     for (const m of msgs) this.startTransit(m.token, queue.id, c.node.id, 'receive', RECEIVE_MS);
   }
 
-  /** Lambda: uma invocação recebe o lote inteiro. */
-  private startInvocation(c: ConsumerState, w: Worker) {
+  /** Lambda: uma invocação recebe o lote inteiro; instância fria inicia antes (cold start). */
+  private startInvocation(c: ConsumerState, w: Worker, j: number, queue?: SqsQueue) {
     const l = c.lambda!;
+    // concorrência reservada: sem vaga na função, a invocação é recusada (throttling)
+    const reserved = l.reserved ?? 0;
+    if (reserved > 0 && c.workers.filter((x) => x !== w && (x.state === 'starting' || x.state === 'processing')).length >= reserved) {
+      this.throttle(c, w, j, queue);
+      return;
+    }
     this.metrics.invocations++;
+    const init = (l.initTime ?? 0) * 1000;
+    w.initAt = null;
+    if (init > 0 && !w.warm) {
+      w.warm = true;
+      w.initAt = this.now;
+      this.metrics.coldStarts++;
+      this.emit({ t: this.now, type: 'cold_start', node: c.node.id, worker: j, ms: init });
+      w.state = 'starting';
+      w.start = this.now;
+      w.until = this.now + init;
+      return;
+    }
+    w.warm = true;
+    this.beginInvocation(c, w);
+  }
+
+  /**
+   * Throttling: com fila (event source mapping), o lote não é apagado e só volta depois do
+   * visibility timeout (conta como recebimento: pode acabar na DLQ). Invocação assíncrona: o evento
+   * volta para a fila interna da Lambda e é tentado de novo em instantes.
+   */
+  private throttle(c: ConsumerState, w: Worker, j: number, queue?: SqsQueue) {
+    this.metrics.throttles++;
+    this.emit({ t: this.now, type: 'throttled', node: c.node.id, size: w.batch.length });
+    this.metrics.recordInvocation(c.node.id, { worker: j, initAt: null, start: this.now, end: this.now, size: w.batch.length, outcome: 'throttled' });
+    for (const b of w.batch) if (b.async) c.asyncQueue.push({ token: b.token, attempt: b.attempt ?? 0, at: this.now + LAMBDA_THROTTLE_RETRY_MS });
+    this.endBatch(w, queue, false);
+    // o poller espera um pouco antes de tentar de novo (backoff)
+    w.nextPollAt = this.now + LAMBDA_THROTTLE_RETRY_MS;
+  }
+
+  /** A função começa a rodar: o timeout conta daqui (a inicialização não entra). */
+  private beginInvocation(c: ConsumerState, w: Worker) {
+    const l = c.lambda!;
     w.invocationStart = this.now;
     w.failReason = null;
     const running = c.workers.filter((x) => x.state === 'processing').length + 1;
@@ -748,14 +876,19 @@ export class Simulation {
     }
   }
 
-  private finishItem(c: ConsumerState, w: Worker, queue: SqsQueue | undefined) {
+  private finishItem(c: ConsumerState, w: Worker, queue: SqsQueue | undefined, j: number) {
     const cfg = c.cfg;
     const id = c.node.id;
     const l = c.lambda;
+    const record = (outcome: InvocationRecord['outcome']) =>
+      this.metrics.recordInvocation(id, { worker: j, initAt: w.initAt, start: w.invocationStart, end: this.now, size: w.batch.length, outcome });
 
     if (l && w.failReason) {
       // banco recusou a conexão ou a função estourou o timeout: o lote inteiro volta para a fila
-      this.emit({ t: this.now, type: 'invocation_failed', node: id, reason: w.failReason, size: w.batch.length });
+      const async = w.batch.some((b) => b.async) ? (true as const) : undefined;
+      this.emit({ t: this.now, type: 'invocation_failed', node: id, reason: w.failReason, size: w.batch.length, async });
+      record(w.failReason);
+      for (const b of w.batch) if (b.async && !b.ok) this.asyncFailed(c, b);
       this.endBatch(w, queue, false);
       return;
     }
@@ -772,11 +905,14 @@ export class Simulation {
       item.ok = true;
       this.applySideEffect(c, item.token);
     }
-    if (failed && item.receipt === null) this.pushFailed(item);
+    if (failed && item.async) this.asyncFailed(c, item);
+    else if (failed && item.receipt === null) this.pushFailed(item);
 
     if (failed && l && !l.reportBatchItemFailures) {
       // a exceção derruba a invocação: nada do lote é apagado, nem o que já teve efeito
-      this.emit({ t: this.now, type: 'invocation_failed', node: id, reason: 'error', size: w.batch.length });
+      const async = item.async ? (true as const) : undefined;
+      this.emit({ t: this.now, type: 'invocation_failed', node: id, reason: 'error', size: w.batch.length, async });
+      record('error');
       this.endBatch(w, queue, false);
       return;
     }
@@ -786,6 +922,7 @@ export class Simulation {
       this.startProcessing(c, w);
       return;
     }
+    if (l) record(w.batch.every((b) => b.ok) ? 'ok' : 'partial');
     this.endBatch(w, queue, true);
   }
 
@@ -838,7 +975,8 @@ export class Simulation {
       if (this.consumedQueues.has(q.id) || !this.dlqIds.has(q.id)) return false;
     }
     for (const c of this.consumers.values()) {
-      if (c.workers.some((w) => w.state === 'processing' || w.state === 'receiving')) return false;
+      if (c.asyncQueue.length) return false;
+      if (c.workers.some((w) => w.state === 'processing' || w.state === 'receiving' || w.state === 'starting')) return false;
     }
     return true;
   }

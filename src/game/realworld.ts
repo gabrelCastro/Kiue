@@ -56,6 +56,7 @@ function lambdaSnippets(graph: Graph, fn: GraphNode<'lambda'>): Snippet[] {
     const flags = [`--function-name ${name}`, `--event-source-arn ${queueArn(source)}`, `--batch-size ${c.batchSize}`];
     if (c.reportBatchItemFailures) flags.push('--function-response-types ReportBatchItemFailures');
     if (c.maxConcurrency > 0) flags.push(`--scaling-config MaximumConcurrency=${Math.max(2, c.maxConcurrency)}`);
+    if ((c.batchWindow ?? 0) > 0) flags.push(`--maximum-batching-window-in-seconds ${c.batchWindow}`);
     out.push({
       title: 'Ligar a fila à função (event source mapping)',
       lang: 'bash',
@@ -66,7 +67,45 @@ function lambdaSnippets(graph: Graph, fn: GraphNode<'lambda'>): Snippet[] {
           : 'A AWS recomenda visibility timeout da fila ≥ 6× o timeout da função.',
     });
   }
+  if (source?.kind === 'topic') {
+    const fnArn = `arn:aws:lambda:${REGION}:${ACCOUNT}:function:${name}`;
+    out.push({
+      title: 'Assinar o tópico com a função (invocação assíncrona)',
+      lang: 'bash',
+      code: `aws lambda add-permission \\\n  --function-name ${name} \\\n  --statement-id sns-${awsName(source)} \\\n  --action lambda:InvokeFunction \\\n  --principal sns.amazonaws.com \\\n  --source-arn ${topicArn(source)}\n\naws sns subscribe \\\n  --topic-arn ${topicArn(source)} \\\n  --protocol lambda \\\n  --notification-endpoint ${fnArn}`,
+      note: 'O SNS invoca a função de forma assíncrona: a Lambda guarda o evento numa fila interna e responde na hora.',
+    });
+    const dest = c.onFailure ? findNode(graph, c.onFailure) : undefined;
+    const destFlag = dest ? ` \\\n  --destination-config '{"OnFailure":{"Destination":"${queueArn(dest)}"}}'` : '';
+    out.push({
+      title: 'Novas tentativas e destino de falha',
+      lang: 'bash',
+      code: `aws lambda put-function-event-invoke-config \\\n  --function-name ${name} \\\n  --maximum-retry-attempts 2${destFlag}`,
+      note: dest
+        ? 'Depois de 2 novas tentativas, o evento (com o erro) vai para a fila de destino. A função precisa de permissão sqs:SendMessage nela.'
+        : 'Sem destino de falha, o evento é descartado depois das novas tentativas.',
+    });
+  }
   out.push({ title: 'Timeout da função', lang: 'bash', code: `aws lambda update-function-configuration \\\n  --function-name ${name} \\\n  --timeout ${c.timeout}` });
+  if ((c.reserved ?? 0) > 0) {
+    out.push({
+      title: 'Concorrência reservada da função',
+      lang: 'bash',
+      code: `aws lambda put-function-concurrency \\\n  --function-name ${name} \\\n  --reserved-concurrent-executions ${c.reserved}`,
+      note:
+        source?.kind === 'queue'
+          ? 'Com fila SQS, invocações acima da reserva são recusadas (throttling) e o lote volta depois do visibility timeout, contando como recebimento. Para limitar o que a fila dispara, use MaximumConcurrency no event source mapping.'
+          : 'Garante e limita a concorrência da função; o que passar é recusado (throttling).',
+    });
+  }
+  if ((c.provisioned ?? 0) > 0) {
+    out.push({
+      title: 'Provisioned concurrency (instâncias já iniciadas)',
+      lang: 'bash',
+      code: `aws lambda put-provisioned-concurrency-config \\\n  --function-name ${name} \\\n  --qualifier prod \\\n  --provisioned-concurrent-executions ${c.provisioned}`,
+      note: 'Vale para uma versão publicada ou alias (aqui, "prod"), não para $LATEST. É cobrada por hora, mesmo sem invocações.',
+    });
+  }
   const body = c.reportBatchItemFailures
     ? `export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {\n  const batchItemFailures: SQSBatchItemFailure[] = [];\n  for (const record of event.Records) {\n    try {\n      await processar(JSON.parse(record.body));\n    } catch {\n      // só esta mensagem volta para a fila\n      batchItemFailures.push({ itemIdentifier: record.messageId });\n    }\n  }\n  return { batchItemFailures };\n};`
     : `export const handler = async (event: SQSEvent): Promise<void> => {\n  for (const record of event.Records) {\n    // se uma mensagem lançar erro, o lote INTEIRO volta para a fila,\n    // inclusive as que já foram processadas\n    await processar(JSON.parse(record.body));\n  }\n};`;

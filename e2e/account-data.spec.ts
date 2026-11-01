@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+import { CATALOG } from '../src/game/level-catalog';
 import { MEMBER_STATE } from './global-setup';
+
+const TOTAL_STARS = CATALOG.length * 3;
 
 type Hook = {
   ctrl: {
@@ -49,7 +52,7 @@ test.describe('progresso na conta', () => {
     });
     await expect(page.getByText('Fase concluída!')).toBeVisible();
     await page.evaluate(() => (window as unknown as { __kiue: Hook }).__kiue.ctrl.openMenu());
-    await expect(stars).toContainText('3 / 66');
+    await expect(stars).toContainText(`3 / ${TOTAL_STARS}`);
 
     // cria a conta: o progresso do navegador passa para ela
     await page.locator('.console-nav').getByRole('button', { name: 'Entrar', exact: true }).click();
@@ -60,23 +63,23 @@ test.describe('progresso na conta', () => {
     await dialog.getByLabel('Senha', { exact: true }).fill('progresso-na-nuvem');
     await dialog.getByRole('button', { name: 'Criar conta' }).click();
     await expect(page.locator('.toast')).toContainText('adicionado à sua conta');
-    await expect(stars).toContainText('3 / 66');
+    await expect(stars).toContainText(`3 / ${TOTAL_STARS}`);
     expect(await page.evaluate(() => localStorage.getItem('kiue:progress:v1'))).toBe('{}');
 
     await page.reload();
     await expect(page.locator('.console-nav .account-btn')).toBeVisible();
-    await expect(stars).toContainText('3 / 66');
+    await expect(stars).toContainText(`3 / ${TOTAL_STARS}`);
 
     // sair: o navegador volta ao progresso de visitante (vazio)
     await page.locator('.console-nav .account-btn').click();
     await page.getByRole('dialog').getByRole('button', { name: 'Sair', exact: true }).click();
-    await expect(stars).toContainText('0 / 66');
+    await expect(stars).toContainText(`0 / ${TOTAL_STARS}`);
 
     await page.locator('.console-nav').getByRole('button', { name: 'Entrar', exact: true }).click();
     await dialog.getByLabel('E-mail').fill(email);
     await dialog.getByLabel('Senha', { exact: true }).fill('progresso-na-nuvem');
     await dialog.getByRole('button', { name: 'Entrar', exact: true }).click();
-    await expect(stars).toContainText('3 / 66');
+    await expect(stars).toContainText(`3 / ${TOTAL_STARS}`);
   });
 });
 

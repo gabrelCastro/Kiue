@@ -944,6 +944,10 @@ code.policy {
   background: #0099ff;
   border-radius: 50%;
 }
+.lg.pad-ice {
+  background: #7dd3fc;
+  border-radius: 50%;
+}
 
 /* rótulos 3D: pílulas flutuantes com um pontinho na cor do serviço e uma setinha para a peça */
 .node-label {
@@ -1110,6 +1114,9 @@ code.policy {
 }
 .fx-ok {
   color: var(--ok);
+}
+.fx-cold {
+  color: #0284c7;
 }
 .fx-bad {
   color: var(--bad);
@@ -2594,4 +2601,42 @@ html.pinned-viewport body {
   flex: 1;
   height: 1px;
   background: var(--border);
+}
+
+/* linha do tempo das invocações da Lambda (inspetor) */
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.timeline h4 {
+  font-size: 13px;
+  font-weight: 700;
+}
+.timeline svg {
+  width: 100%;
+  height: auto;
+  min-height: 40px;
+  max-height: 200px;
+  border-radius: 4px;
+}
+.timeline-axis {
+  display: flex;
+  justify-content: space-between;
+}
+.timeline-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: var(--text-2);
+}
+.timeline-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: -1px;
 }

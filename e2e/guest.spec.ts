@@ -1,10 +1,12 @@
 import { expect, test } from '@playwright/test';
+import { CATALOG } from '../src/game/level-catalog';
 
 test('visitante joga as fases 1 e 2; a 3 pede conta e libera depois do cadastro', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.guest-banner')).toContainText('visitante');
   await expect(page.getByRole('button', { name: /Primeiro pedido/ })).toBeEnabled();
-  await expect(page.locator('.level-card.needs-account')).toHaveCount(20);
+  // todas menos as 2 abertas para visitantes
+  await expect(page.locator('.level-card.needs-account')).toHaveCount(CATALOG.length - 2);
 
   await page.getByRole('button', { name: /A fila não para de crescer/ }).click();
   const dialog = page.getByRole('dialog');

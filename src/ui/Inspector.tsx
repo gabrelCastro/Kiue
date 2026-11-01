@@ -6,6 +6,7 @@ import { snippetsFor } from '../game/realworld';
 import type { FilterPolicy, GraphEdge, GraphNode } from '../sim/types';
 import { NumberField, Select, Toggle } from './fields';
 import { useController } from './hooks';
+import { InvocationTimeline } from './InvocationTimeline';
 
 const RETENTION_OPTIONS = [
   { value: 60, label: '1 minuto (mínimo)' },
@@ -71,6 +72,8 @@ function NodeConfig({ ctrl, node }: { ctrl: Controller; node: GraphNode }) {
       {node.kind === 'topic' && <TopicConfig ctrl={ctrl} node={node as GraphNode<'topic'>} disabled={disabled} />}
       {node.kind === 'consumer' && <ConsumerConfig ctrl={ctrl} node={node as GraphNode<'consumer'>} disabled={disabled} />}
       {node.kind === 'producer' && <ProducerConfig ctrl={ctrl} node={node as GraphNode<'producer'>} disabled={disabled} />}
+      {/* rodando, a configuração fica travada: o que interessa vem primeiro */}
+      {node.kind === 'lambda' && ctrl.sim && <InvocationTimeline nodeId={node.id} />}
       {node.kind === 'lambda' && <LambdaConfig ctrl={ctrl} node={node as GraphNode<'lambda'>} disabled={disabled} />}
       <Connections ctrl={ctrl} node={node} />
       {ctrl.canEdit && (
@@ -431,20 +434,47 @@ function LambdaConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphN
   const queue = src ? findNode(ctrl.graph, src.from) : undefined;
   const vt = queue?.kind === 'queue' ? (queue as GraphNode<'queue'>).config.visibilityTimeout : null;
   const editable = ctrl.hasConcept('lambda');
+  // ligada a um tópico SNS: invocação assíncrona, sem event source mapping (sem lote, sem
+  // MaximumConcurrency, sem batching window); falha vira nova tentativa da própria Lambda
+  const isAsync = queue?.kind === 'topic';
+  const failureQueues = ctrl.graph.nodes.filter((n): n is GraphNode<'queue'> => n.kind === 'queue' && !(n as GraphNode<'queue'>).config.fifo);
   return (
     <>
       <p class="kv">
         ~{c.processingTime}s por mensagem · timeout da função <b>{c.timeout}s</b>
       </p>
+      {isAsync && (
+        <>
+          <p class="kv">
+            Acionada pelo SNS (<b>invocação assíncrona</b>): uma mensagem por invocação. Se a função falhar, a própria Lambda tenta mais 2 vezes.
+          </p>
+          {ctrl.hasConcept('onfailure') ? (
+            <Select
+              label="Destino em caso de falha (on-failure)"
+              value={c.onFailure ?? ''}
+              options={[{ value: '', label: '— nenhum (o evento se perde) —' }, ...failureQueues.map((q) => ({ value: q.id, label: q.name }))]}
+              disabled={disabled}
+              onChange={(v) => set({ onFailure: v || null })}
+              help={failureQueues.length ? 'Fila SQS que recebe o evento quando as novas tentativas acabam.' : 'Coloque uma fila SQS Standard para usar como destino de falha.'}
+            />
+          ) : (
+            c.onFailure && (
+              <p class="kv">
+                Destino de falha: <b>{findNode(ctrl.graph, c.onFailure)?.name ?? c.onFailure}</b>
+              </p>
+            )
+          )}
+        </>
+      )}
       {c.dbLimit > 0 && (
         <p class="kv">
           Banco de dados aguenta <b>{c.dbLimit}</b> conexões simultâneas (uma por invocação)
         </p>
       )}
-      {vt !== null && vt < c.timeout * 6 && (
+      {!isAsync && vt !== null && vt < c.timeout * 6 && (
         <p class="locked-hint">Visibility timeout da fila ({vt}s) é menor que 6× o timeout da função ({c.timeout * 6}s), como a AWS recomenda.</p>
       )}
-      {ctrl.hasConcept('batch') ? (
+      {!isAsync && ctrl.hasConcept('batch') ? (
         <NumberField
           label="Batch size"
           value={c.batchSize}
@@ -455,11 +485,13 @@ function LambdaConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphN
           help="Mensagens por invocação. Na AWS vai até 10.000 (com batching window)."
         />
       ) : (
-        <p class="kv">
-          Batch size: <b>{c.batchSize}</b>
-        </p>
+        !isAsync && (
+          <p class="kv">
+            Batch size: <b>{c.batchSize}</b>
+          </p>
+        )
       )}
-      {editable ? (
+      {isAsync ? null : editable ? (
         <>
           <Toggle
             label="Report batch item failures"
@@ -480,6 +512,67 @@ function LambdaConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphN
         </>
       ) : (
         <Locked text="Configuração da função fixa nesta fase." />
+      )}
+      {editable && (
+        <NumberField
+          label="Concorrência reservada (da função)"
+          value={c.reserved ?? 0}
+          min={0}
+          max={20}
+          disabled={disabled}
+          onChange={(v) => set({ reserved: v })}
+          help={
+            (c.reserved ?? 0) === 0
+              ? 'Sem reserva. Com reserva, a função nunca passa desse número; o que vier além é recusado (throttling).'
+              : isAsync
+                ? 'Acima disso a invocação é recusada (throttling) e a Lambda tenta de novo depois.'
+                : 'Acima disso a invocação é recusada (throttling): o lote não é apagado e só volta depois do visibility timeout. Para limitar o que a fila dispara, prefira MaximumConcurrency.'
+          }
+        />
+      )}
+      {ctrl.hasConcept('coldstart') && (
+        <>
+          {ctrl.level?.track === 'sandbox' ? (
+            <NumberField
+              label="Inicialização (cold start)"
+              value={c.initTime ?? 0}
+              min={0}
+              max={5}
+              step={0.5}
+              unit="s"
+              disabled={disabled}
+              onChange={(v) => set({ initTime: v })}
+              help="Tempo para uma instância nova carregar o código e as dependências antes da 1ª invocação. 0 = não simula."
+            />
+          ) : (
+            (c.initTime ?? 0) > 0 && (
+              <p class="kv">
+                Instância nova leva <b>{c.initTime}s</b> para iniciar (cold start)
+              </p>
+            )
+          )}
+          <NumberField
+            label="Provisioned concurrency"
+            value={c.provisioned ?? 0}
+            min={0}
+            max={c.maxConcurrency > 0 ? c.maxConcurrency : 20}
+            disabled={disabled}
+            onChange={(v) => set({ provisioned: v })}
+            help="Instâncias mantidas já iniciadas: atendem sem cold start (e são cobradas mesmo paradas)."
+          />
+        </>
+      )}
+      {!isAsync && ctrl.hasConcept('batchwindow') && (
+        <NumberField
+          label="Batching window (MaximumBatchingWindowInSeconds)"
+          value={c.batchWindow ?? 0}
+          min={0}
+          max={10}
+          unit="s"
+          disabled={disabled}
+          onChange={(v) => set({ batchWindow: v })}
+          help="Com menos mensagens que um lote cheio, espera até isso antes de invocar: lotes maiores, menos invocações, mais latência."
+        />
       )}
     </>
   );

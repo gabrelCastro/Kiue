@@ -92,6 +92,27 @@ exports[`fingerprint determinístico > fase c12 1`] = `
 }
 `;
 
+exports[`fingerprint determinístico > fase c13 1`] = `
+{
+  "initial": "886bfc46 {"now":56100,"produced":150,"processed":150,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":150,"Publish":0,"ReceiveMessage":175,"DeleteMessage":150,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":4.45,"max":6.45}",
+  "solved": "dee5756 {"now":56000,"produced":150,"processed":150,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":150,"Publish":0,"ReceiveMessage":175,"DeleteMessage":150,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":2.05,"max":2.2}",
+}
+`;
+
+exports[`fingerprint determinístico > fase c14 1`] = `
+{
+  "initial": "379d6e79 {"now":100600,"produced":300,"processed":300,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":300,"Publish":0,"ReceiveMessage":319,"DeleteMessage":300,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":0.9,"max":0.9}",
+  "solved": "f251607 {"now":101100,"produced":300,"processed":300,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":300,"Publish":0,"ReceiveMessage":63,"DeleteMessage":0,"DeleteMessageBatch":43,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":2.9,"max":3}",
+}
+`;
+
+exports[`fingerprint determinístico > fase c15 1`] = `
+{
+  "initial": "c49e9794 {"now":40700,"produced":90,"processed":79,"lost":11,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":0,"Publish":90,"ReceiveMessage":0,"DeleteMessage":0,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.4,"max":1.4}",
+  "solved": "1d321675 {"now":200000,"produced":90,"processed":79,"lost":0,"dup":0,"ooo":0,"dlq":11,"api":{"SendMessage":0,"Publish":90,"ReceiveMessage":0,"DeleteMessage":0,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.4,"max":1.4}",
+}
+`;
+
 exports[`fingerprint determinístico > fase i01 1`] = `
 {
   "initial": "56b00616 {"now":14000,"produced":15,"processed":0,"lost":15,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":0,"Publish":0,"ReceiveMessage":0,"DeleteMessage":0,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":0,"max":0}",

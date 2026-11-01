@@ -69,6 +69,11 @@ export function describeEvent(e: SimEvent, graph: Graph, verbose: boolean): LogL
     case 'outage_end':
       return L(`${name(e.node)} voltou`, 'ok');
     case 'invocation_failed': {
+      if (e.async) {
+        // invocação assíncrona (SNS → Lambda): não há fila; a Lambda decide (nova tentativa ou destino)
+        const what = { error: 'a função lançou erro', timeout: 'a função estourou o timeout', db: 'o banco recusou a conexão' }[e.reason];
+        return L(`${name(e.node)}: invocação assíncrona falhou: ${what}`, 'bad');
+      }
       const why = {
         error: 'uma mensagem lançou erro e o lote inteiro volta para a fila',
         timeout: 'a função estourou o timeout; o lote inteiro volta para a fila',
@@ -78,10 +83,19 @@ export function describeEvent(e: SimEvent, graph: Graph, verbose: boolean): LogL
     }
     case 'scaled':
       return L(`${name(e.node)}: concorrência agora é ${e.concurrency}`, 'info');
+    case 'throttled':
+      if (!verbose) return null;
+      return L(`${name(e.node)}: invocação recusada (throttling): sem concorrência reservada livre; ${e.size === 1 ? 'a mensagem volta' : `as ${e.size} mensagens voltam`} mais tarde`, 'warn');
+    case 'cold_start':
+      return verbose ? L(`${name(e.node)}: cold start, instância ${e.worker + 1} iniciando (${(e.ms / 1000).toFixed(1)}s antes de processar)`, 'muted') : null;
     case 'visibility_extended':
       return verbose ? L(`${name(e.node)} estendeu a visibilidade de ${e.count} mensage${e.count === 1 ? 'm' : 'ns'} (ChangeMessageVisibility)`, 'muted') : null;
     case 'sns_retry':
       return L(`${name(e.node)} → ${name(e.target)}: entrega de ${msgRef(e.token)} falhou; nova tentativa (nº${e.attempt})`, 'warn');
+    case 'lambda_retry':
+      return L(`${name(e.node)}: invocação assíncrona de ${msgRef(e.token)} falhou; a Lambda tenta de novo (nº${e.attempt})`, 'warn');
+    case 'lambda_on_failure':
+      return L(`${name(e.node)}: tentativas esgotadas; ${msgRef(e.token)} foi para o destino de falha (${name(e.dlq)})`, 'dlq');
     case 'sns_dlq':
       return L(`${name(e.node)} → ${name(e.target)}: retries esgotados; ${msgRef(e.token)} foi para a DLQ da assinatura (${name(e.dlq)})`, 'dlq');
     case 's3_put':

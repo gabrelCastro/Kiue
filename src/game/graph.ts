@@ -28,16 +28,16 @@ export function connectionError(g: Graph, fromId: string, toId: string): string 
       if (g.edges.some((e) => e.from === fromId))
         return 'Um produtor envia para um único destino. Remova a conexão atual primeiro.';
       if (to.kind === 'lambda')
-        return 'Neste jogo a Lambda é acionada por uma fila (event source mapping). Coloque uma fila SQS entre o produtor e a função.';
+        return 'Neste jogo a Lambda é acionada por uma fila SQS (event source mapping) ou por um tópico SNS (invocação assíncrona). Coloque um dos dois entre o produtor e a função.';
       break;
     case 'topic': {
       const topicFifo = (from as GraphNode<'topic'>).config.fifo;
-      if (to.kind === 'consumer') {
+      if (to.kind === 'consumer' || to.kind === 'lambda') {
         if (topicFifo) return 'Tópico SNS FIFO só entrega para filas SQS FIFO.';
-        break; // assinatura HTTP/HTTPS
+        break; // assinatura HTTP/HTTPS ou Lambda (invocação assíncrona)
       }
       if (to.kind !== 'queue')
-        return 'Neste jogo o SNS entrega para filas SQS e endpoints HTTP. (Na AWS ele também invoca Lambda e envia e-mail e SMS.)';
+        return 'Neste jogo o SNS entrega para filas SQS, Lambdas e endpoints HTTP. (Na AWS ele também envia e-mail e SMS.)';
       if (topicFifo && !(to as GraphNode<'queue'>).config.fifo) return 'Tópico SNS FIFO só aceita filas SQS FIFO como assinantes.';
       if (!topicFifo && (to as GraphNode<'queue'>).config.fifo)
         return 'Fila FIFO só pode assinar tópico SNS FIFO. Mude o tópico para FIFO.';

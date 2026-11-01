@@ -11,11 +11,12 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-/** modelo → partes. `exporta=true` faz as peças móveis saírem na própria origem (articulação, célula, portão). */
+/** modelo → partes. `exporta=true` faz as peças móveis saírem na própria origem (articulação, célula, portão, alçapão, robô). */
 const MODELS = {
   consumidor: ['corpo', 'detalhe', 'tampo', 'celula', 'luz', 'giro', 'superior', 'antebraco'],
   fila: ['moldura', 'base', 'detalhe', 'rolos', 'guias', 'alerta'],
   produtor: ['corpo', 'telhado', 'detalhe', 'doca', 'janelas', 'portao', 'palete', 'caixas'],
+  lambda: ['deck', 'hub', 'hub_detalhe', 'baia', 'trava', 'luz', 'robo_corpo', 'robo_faixa', 'robo_detalhe'],
 };
 
 const tmp = mkdtempSync(join(tmpdir(), 'kiue-models-'));

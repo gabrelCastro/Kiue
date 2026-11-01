@@ -3,6 +3,7 @@ import { useCompact, useTouchUI } from './device';
 import { KIND_LABEL } from '../game/catalog';
 import { SPEEDS, type Controller } from '../game/controller';
 import type { GoalResult } from '../game/goals';
+import type { GraphNode } from '../sim/types';
 import { auth } from '../auth/store';
 import { AccountButton } from './auth/AccountButton';
 import { loadScene } from './scene-loader';
@@ -248,6 +249,8 @@ function StageHint() {
 }
 
 function Legend() {
+  const ctrl = useController();
+  const coldStart = ctrl.graph.nodes.some((n) => n.kind === 'lambda' && ((n as GraphNode<'lambda'>).config.initTime ?? 0) > 0);
   return (
     <div class="legend">
       <span>
@@ -262,6 +265,11 @@ function Legend() {
       <span>
         <i class="lg pad-blue" /> long polling
       </span>
+      {coldStart && (
+        <span>
+          <i class="lg pad-ice" /> iniciando (cold start)
+        </span>
+      )}
     </div>
   );
 }
@@ -299,6 +307,9 @@ function Metrics() {
       {item('na DLQ', m.movedToDlq)}
       {item('respostas vazias', m.emptyReceives, false, 'ReceiveMessage que voltou sem mensagens (também é cobrado)')}
       {item('chamadas de API', m.apiCalls, false, apiTitle)}
+      {ctrl.graph.nodes.some((n) => n.kind === 'lambda') && item('invocações', m.invocations, false, 'Invocações da Lambda (cada uma recebe um lote)')}
+      {m.coldStarts > 0 && item('cold starts', m.coldStarts, false, 'Invocações que esperaram uma instância nova iniciar')}
+      {m.throttles > 0 && item('throttles', m.throttles, true, 'Invocações recusadas por falta de concorrência reservada')}
       {item('latência p95', `${m.latencyPercentile(95).toFixed(1)}s`)}
     </div>
   );

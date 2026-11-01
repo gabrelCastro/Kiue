@@ -11,6 +11,7 @@ export type Goal =
   | { type: 'minLatency'; seconds: number }
   | { type: 'maxP95'; seconds: number }
   | { type: 'maxApiCalls'; max: number }
+  | { type: 'maxInvocations'; max: number }
   | { type: 'maxLatency'; seconds: number }
   | { type: 'noGoodInDlq' }
   | { type: 'noDbOverload' };
@@ -172,6 +173,18 @@ export function evaluateGoal(goal: Goal, sim: Simulation, graph: Graph, final: b
         status: fail ? 'fail' : final ? 'ok' : 'pending',
         detail: `${m.apiCalls}/${goal.max}`,
         why: fail ? 'Chamadas demais: short polling vazio custa dinheiro. Long polling e batch reduzem as chamadas.' : undefined,
+      };
+    }
+    case 'maxInvocations': {
+      const fail = m.invocations > goal.max;
+      return {
+        goal,
+        label: `No máximo ${goal.max} invocações da Lambda`,
+        status: fail ? 'fail' : final ? 'ok' : 'pending',
+        detail: `${m.invocations}/${goal.max}`,
+        why: fail
+          ? 'Invocações demais: cada uma é cobrada. Com a fila recebendo pouco a pouco, a Lambda dispara lotes pequenos; uma batching window espera juntar lotes maiores.'
+          : undefined,
       };
     }
   }

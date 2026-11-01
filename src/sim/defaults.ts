@@ -65,6 +65,11 @@ export function defaultLambda(over: Partial<LambdaConfig> = {}): LambdaConfig {
     interest: null,
     reportBatchItemFailures: false,
     dbLimit: 0,
+    initTime: 0,
+    provisioned: 0,
+    batchWindow: 0,
+    onFailure: null,
+    reserved: 0,
     ...over,
   };
 }
