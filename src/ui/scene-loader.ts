@@ -6,8 +6,11 @@ export function loadScene(): Promise<typeof import('../render/scene')> {
   return (pending ??= import('../render/scene'));
 }
 
-/** Baixa a cena quando o navegador estiver ocioso. */
+/**
+ * Baixa a cena quando o navegador estiver ocioso. Espera uns segundos antes: na tela inicial, a
+ * conexão é da vitrine (que já traz three.js); a cena do jogo só precisa estar pronta no clique.
+ */
 export function prefetchScene(): void {
   const idle = (window as { requestIdleCallback?: (fn: () => void) => void }).requestIdleCallback ?? ((fn: () => void) => setTimeout(fn, 200));
-  idle(() => void loadScene());
+  setTimeout(() => idle(() => void loadScene()), 2500);
 }

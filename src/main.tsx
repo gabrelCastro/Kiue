@@ -63,8 +63,11 @@ render(
 );
 
 // PWA: cache do jogo para abrir sem rede (só no build; em desenvolvimento atrapalha o hot reload)
+// Ao instalar, o service worker baixa todos os arquivos do jogo: na primeira visita isso disputava
+// a conexão com a vitrine da tela inicial. Ele espera a página carregar e mais um tempo ocioso.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  const idle = (window as { requestIdleCallback?: (fn: () => void, o?: { timeout: number }) => void }).requestIdleCallback ?? ((fn: () => void) => setTimeout(fn, 1));
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    setTimeout(() => idle(() => void navigator.serviceWorker.register('sw.js').catch(() => {}), { timeout: 5000 }), 4000);
   });
 }
