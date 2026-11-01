@@ -447,7 +447,7 @@ export class Simulation {
     if (target.kind === 'queue') {
       this.call('SendMessage', chunks);
       if (token.sizeKb > SQS_MAX_KB) {
-        fail(`MessageTooLong: ${token.sizeKb} KB passa do limite de 1 MiB do SQS`);
+        fail(`mensagem de ${token.sizeKb} KB passa do limite de 1 MiB da fila`);
         return;
       }
       const res = this.queues.get(target.id)!.validateSend(token);
@@ -458,7 +458,7 @@ export class Simulation {
     } else if (target.kind === 'topic') {
       this.call('Publish', chunks);
       if (token.sizeKb > SNS_MAX_KB) {
-        fail(`mensagem de ${token.sizeKb} KB passa do limite de 256 KB do SNS`);
+        fail(`mensagem de ${token.sizeKb} KB passa do limite de 256 KB do tópico`);
         return;
       }
       const res = this.validatePublish(this.topics.get(target.id)!.node.config, token);
@@ -472,7 +472,7 @@ export class Simulation {
 
   private validatePublish(cfg: TopicConfig, token: Token): { ok: true } | { ok: false; reason: string } {
     if (!cfg.fifo) return { ok: true };
-    if (!token.groupId) return { ok: false, reason: 'tópico FIFO exige MessageGroupId' };
+    if (!token.groupId) return { ok: false, reason: 'tópico FIFO exige ID de grupo' };
     if (!token.dedupId && !cfg.contentDedup)
       return { ok: false, reason: 'tópico FIFO exige MessageDeduplicationId ou ContentBasedDeduplication' };
     return { ok: true };

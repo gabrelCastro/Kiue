@@ -1,6 +1,6 @@
 # Kiuê
 
-Jogo 3D (three.js + Preact) para aprender **Amazon SQS** e **Amazon SNS**. Você monta arquiteturas de mensageria, roda uma simulação fiel ao comportamento da AWS e vê os pedidos circulando, sendo perdidos, duplicados, reordenados ou indo para a DLQ.
+Jogo 3D (three.js + Preact) para aprender **filas, tópicos e mensageria**. Você monta arquiteturas de mensageria, roda uma simulação fiel ao comportamento de serviços de fila gerenciados e vê os pedidos circulando, sendo perdidos, duplicados, reordenados ou indo para a DLQ.
 
 ```bash
 npm install
@@ -9,13 +9,13 @@ npm run dev        # jogo em http://localhost:5173 + API de contas em :8787
 
 ## Conteúdo
 
-**Trilha Iniciante** (10 fases): fila SQS, buffer em picos, consumidores concorrentes, SNS fan-out, filter policy, DLQ, visibility timeout, at-least-once/idempotência, FIFO, long polling e custo.
+**Trilha Iniciante** (10 fases): fila de mensagens, buffer em picos, consumidores concorrentes, fan-out com tópico, filter policy, DLQ, visibility timeout, at-least-once/idempotência, FIFO, long polling e custo.
 
-**Trilha Certificação** (15 fases, libera após a fase 5): SNS FIFO → SQS FIFO, retenção, delay queue, batch × visibility timeout, deduplicação FIFO, SQS + Lambda (falha parcial de lote, MaximumConcurrency, cold start com provisioned concurrency e batching window), SNS → Lambda (invocação assíncrona com novas tentativas e destino de falha), heartbeat com ChangeMessageVisibility, retries do SNS e DLQ de assinatura, paralelismo por MessageGroupId, limite de tamanho com Extended Client e um exame final que junta tudo.
+**Trilha Certificação** (15 fases, libera após a fase 5): tópico FIFO → fila FIFO, retenção, delay queue, batch × visibility timeout, deduplicação FIFO, fila + função sob demanda (falha parcial de lote, concorrência máxima, cold start com provisioned concurrency e batching window), tópico → função (invocação assíncrona com novas tentativas e destino de falha), heartbeat estendendo a visibilidade, novas tentativas do tópico e DLQ de assinatura, paralelismo por grupo de mensagens, limite de tamanho com claim check e um exame final que junta tudo.
 
 **Sandbox**: tudo liberado, inclusive o produtor.
 
-Cada fase tem briefing, dica, objetivos medidos ao vivo, 3 estrelas (objetivos, latência p95 e chamadas de API), resumo do que foi aprendido, quiz e o painel **Na vida real**, com o comando AWS CLI / código SDK v3 equivalente a cada peça.
+Cada fase tem briefing, dica, objetivos medidos ao vivo, 3 estrelas (objetivos, latência p95 e chamadas de API), resumo do que foi aprendido, quiz e o painel **Na vida real**, com a configuração (num YAML genérico) e o código equivalentes a cada peça, sem amarrar a um provedor.
 
 ## Como jogar
 
@@ -49,13 +49,13 @@ O jogo roda em tempo real com dezenas de milhares de mensagens (sandbox), então
 
 | Onde | Estrutura | O que evita |
 |---|---|---|
-| Fila (`sim/queue.ts`) | lista em ordem de chegada com lápides e compactação; índice `receipt → mensagem` | `findIndex`/`splice` no DeleteMessage e no heartbeat |
-| Fila | contadores por estado (atrasada, visível, em voo) | contar a fila inteira para HUD e escala da Lambda |
+| Fila (`sim/queue.ts`) | lista em ordem de chegada com lápides e compactação; índice `receipt → mensagem` | `findIndex`/`splice` no delete e no heartbeat |
+| Fila | contadores por estado (atrasada, visível, em voo) | contar a fila inteira para HUD e escala da função |
 | Fila | min-heaps para delay, visibility timeout e retenção | percorrer todas as mensagens a cada passo |
 | Fila | piso de `seq` das visíveis + busca binária | pular as mensagens em voo no começo da fila |
-| Fila Standard | reordenamento best-effort gerado sob demanda | sortear um número por mensagem visível a cada ReceiveMessage |
-| Fila FIFO | índice por `MessageGroupId` + merge k-way das cabeças dos grupos | varrer a fila inteira para achar grupos livres |
-| Janela de dedup, retries do SNS, reenvios, trânsitos | filas FIFO (`Deque`): prazos fixos vencem em ordem | filtrar listas inteiras a cada passo |
+| Fila Standard | reordenamento best-effort gerado sob demanda | sortear um número por mensagem visível a cada receive |
+| Fila FIFO | índice por ID de grupo + merge k-way das cabeças dos grupos | varrer a fila inteira para achar grupos livres |
+| Janela de dedup, retries do tópico, reenvios, trânsitos | filas FIFO (`Deque`): prazos fixos vencem em ordem | filtrar listas inteiras a cada passo |
 | Log de eventos | buffers circulares (todos e só os notáveis) | `splice(0, …)` a cada evento e o log "sumir" sob carga |
 | Métricas | latências ordenadas com merge incremental; máximo e mínimo acumulados | reordenar tudo a cada consulta da HUD; `Math.max(...array)` estourar a pilha |
 
@@ -65,7 +65,7 @@ No renderer: cena desenhada só quando algo muda (montando, pausado ou no result
 
 ### Modelos 3D
 
-Produtor, fila e consumidor são modelados à mão em OpenSCAD (`models/*.scad`, 1 unidade do jogo = 100 mm, Z para cima, frente em −Y). Cada material é uma parte separada (`parte = "corpo"`, `"detalhe"`…), para o jogo dar a cor e trocá-la em tempo de jogo; as partes móveis (portão da doca, célula e articulações dos braços robóticos) saem na própria origem. `node scripts/models.mjs` exporta as partes, une os vértices e grava `src/render/models.gen.ts` (posições Int16 + índices em base64, ~8 mil triângulos no total). O arquivo gerado vai para o repositório, então o build não precisa do OpenSCAD; rode o script de novo depois de mudar um `.scad`. `src/render/models.ts` converte os eixos e calcula as normais (quinas vivas acima de 35°). O produtor é uma doca de expedição (o portão enrola a cada mensagem enviada) e o consumidor, uma bancada de triagem com um braço robótico por worker: `render/robots.ts` move os braços conforme o estado do worker (trabalhando, buscando mensagens, ocioso, desligado, caído), com um InstancedMesh por parte. A Lambda é uma estação de robôs sob demanda (`render/station.ts`): cada instância é um robô que sobe de um alçapão quando a função escala e afunda quando ela encolhe; alçapões além do MaximumConcurrency ficam travados; o lote de cada invocação empilha na bandeja do robô, com uma barra do tempo contra o timeout (azul enquanto a instância inicia, no cold start). Vidro e esteira da fila, pedestais e tópico continuam montados no código (`render/nodes.ts`).
+Produtor, fila e consumidor são modelados à mão em OpenSCAD (`models/*.scad`, 1 unidade do jogo = 100 mm, Z para cima, frente em −Y). Cada material é uma parte separada (`parte = "corpo"`, `"detalhe"`…), para o jogo dar a cor e trocá-la em tempo de jogo; as partes móveis (portão da doca, célula e articulações dos braços robóticos) saem na própria origem. `node scripts/models.mjs` exporta as partes, une os vértices e grava `src/render/models.gen.ts` (posições Int16 + índices em base64, ~8 mil triângulos no total). O arquivo gerado vai para o repositório, então o build não precisa do OpenSCAD; rode o script de novo depois de mudar um `.scad`. `src/render/models.ts` converte os eixos e calcula as normais (quinas vivas acima de 35°). O produtor é uma doca de expedição (o portão enrola a cada mensagem enviada) e o consumidor, uma bancada de triagem com um braço robótico por worker: `render/robots.ts` move os braços conforme o estado do worker (trabalhando, buscando mensagens, ocioso, desligado, caído), com um InstancedMesh por parte. A função sob demanda é uma estação de robôs (`render/station.ts`): cada instância é um robô que sobe de um alçapão quando a função escala e afunda quando ela encolhe; alçapões além do MaximumConcurrency ficam travados; o lote de cada invocação empilha na bandeja do robô, com uma barra do tempo contra o timeout (azul enquanto a instância inicia, no cold start). Vidro e esteira da fila, pedestais e tópico continuam montados no código (`render/nodes.ts`).
 
 A tela inicial abre com uma vitrine (`render/showcase.ts`): produtor → fila → consumidor com as mesmas peças, numa coreografia própria (sem o simulador) em que rajadas do produtor enchem a fila e os braços esvaziam. Ela só anima visível na tela e com a aba aberta; com movimento reduzido, mostra um quadro parado.
 
@@ -89,7 +89,7 @@ Fases são dados: grafo inicial, paleta, conceitos liberados no inspetor, objeti
 
 ## Contas (back-end)
 
-Visitantes jogam as fases 1 e 2 da trilha Iniciante e um sandbox limitado (1 produtor, 1 tópico, 2 filas, 2 consumidores, 1 Lambda); o resto pede conta. O bloqueio é real: o bundle do jogo traz só o catálogo (títulos) e as fases abertas; o conteúdo das demais chega por `GET /api/levels/:id`, que exige sessão. O `npm run build` falha se algum texto de `content/` aparecer no bundle (`scripts/check-bundle.ts`). Sem a API, o jogo segue no modo visitante e o botão **Entrar** avisa que as contas estão indisponíveis. Com a API, o jogador cria conta, entra, sai, troca o nome e a senha, desconecta outros aparelhos, redefine a senha por e-mail e exclui a conta. Com conta, o progresso e os sandboxes ficam salvos no servidor.
+Visitantes jogam as fases 1 e 2 da trilha Iniciante e um sandbox limitado (1 produtor, 1 tópico, 2 filas, 2 consumidores, 1 função); o resto pede conta. O bloqueio é real: o bundle do jogo traz só o catálogo (títulos) e as fases abertas; o conteúdo das demais chega por `GET /api/levels/:id`, que exige sessão. O `npm run build` falha se algum texto de `content/` aparecer no bundle (`scripts/check-bundle.ts`). Sem a API, o jogo segue no modo visitante e o botão **Entrar** avisa que as contas estão indisponíveis. Com a API, o jogador cria conta, entra, sai, troca o nome e a senha, desconecta outros aparelhos, redefine a senha por e-mail e exclui a conta. Com conta, o progresso e os sandboxes ficam salvos no servidor.
 
 **Progresso**: visitante guarda no navegador. Ao entrar, o progresso de visitante deste navegador é somado ao da conta e sai do navegador. Logado, cada fase concluída vai para o servidor; se a rede falhar, fica pendente (também no navegador) e é reenviada. A gravação é uma mesclagem que fica com o melhor resultado de cada fase, então reenviar ou jogar em dois aparelhos ao mesmo tempo não perde nada (`src/account/progress-sync.ts`).
 
@@ -146,8 +146,12 @@ Como funciona: OpenID Connect com código + PKCE, no servidor (`server/src/auth/
 - **Vínculo automático**: se o e-mail bater com o de uma conta existente, o Google é vinculado a ela (progresso e sandboxes ficam). Como o cadastro por senha não confirma o e-mail, **a senha dessa conta é anulada e as sessões abertas caem** no vínculo; quem é o dono entra pelo Google ou usa "Esqueci minha senha" para definir outra.
 - **Conta só-Google** não tem senha; para excluí-la confirma-se digitando o e-mail, e "Definir senha" manda o link de redefinição.
 
-Em desenvolvimento, o e-mail de redefinição aparece no terminal da API. Para produção falta plugar um `Mailer` real (ex.: Amazon SES). O serviço não conhece o SQLite: para levar a API para Lambda + DynamoDB basta outra implementação de `UserRepo`/`SessionRepo`/`ResetRepo`/`ProgressRepo`/`SandboxRepo`, e o Hono roda na Lambda sem mudar as rotas. Os limites de tentativa ficam em memória: com várias instâncias, precisam de um armazenamento compartilhado.
+Em desenvolvimento, o e-mail de redefinição aparece no terminal da API. Para produção falta plugar um `Mailer` real (um serviço de e-mail transacional). O serviço não conhece o SQLite: para levar a API para outro banco basta outra implementação de `UserRepo`/`SessionRepo`/`ResetRepo`/`ProgressRepo`/`SandboxRepo`, e o Hono roda em servidor ou em função sob demanda sem mudar as rotas. Os limites de tentativa ficam em memória: com várias instâncias, precisam de um armazenamento compartilhado.
 
 ## Simplificações conscientes
 
-Tempos e volumes são reduzidos para caber num jogo (por exemplo, os retries HTTP do SNS acontecem a cada 5 s, não 20 s). O SNS entrega para filas SQS, endpoints HTTPS e Lambdas (invocação assíncrona: a Lambda tenta de novo 2 vezes, a cada 3 e 6 s no jogo, em vez de ~1 e ~2 min); na AWS também envia e-mail/SMS. A Lambda escala de 1 em 1 por segundo até no máximo 20; o cold start só é simulado quando a função tem tempo de inicialização (`initTime`), e uma instância desativada pela escala esfria na hora (na AWS, depois de minutos parada). A filter policy usa apenas o atributo `tipo`. Cotas de vazão do FIFO e criptografia aparecem só nas lições e no quiz. As regras de entrega, visibilidade, redrive, ordem por grupo, deduplicação, retenção, delay e polling seguem a documentação da AWS (veja `docs/REQUISITOS.md`).
+Tempos e volumes são reduzidos para caber num jogo (por exemplo, os retries HTTP do tópico acontecem a cada 5 s, não 20 s). O tópico entrega para filas, endpoints HTTPS e funções (invocação assíncrona: a plataforma tenta de novo 2 vezes, a cada 3 e 6 s no jogo, em vez de minutos); nos serviços reais também costuma enviar e-mail/SMS. A função escala de 1 em 1 por segundo até no máximo 20; o cold start só é simulado quando a função tem tempo de inicialização (`initTime`), e uma instância desativada pela escala esfria na hora (nos serviços reais, depois de minutos parada). A filter policy usa apenas o atributo `tipo`. Cotas de vazão do FIFO e criptografia aparecem só nas lições e no quiz. As regras de entrega, visibilidade, redrive, ordem por grupo, deduplicação, retenção, delay e polling seguem o comportamento documentado de serviços de fila gerenciados (veja `docs/REQUISITOS.md`).
+
+## Marcas
+
+Kiuê é um projeto educacional independente, sem afiliação, patrocínio ou endosso da Amazon Web Services, Inc. ou de suas afiliadas. Os conceitos do jogo correspondem aos de serviços como Amazon SQS (fila), Amazon SNS (tópico) e AWS Lambda (função sob demanda); esses nomes são marcas dos respectivos donos e aparecem aqui só para indicar a correspondência.

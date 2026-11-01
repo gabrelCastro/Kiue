@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import { GLOSSARY } from '../game/glossary';
+import { GLOSSARY, SERVICE_LABEL } from '../game/glossary';
 import { useController } from './hooks';
 import { LevelScreen } from './LevelScreen';
 import { Menu } from './Menu';
@@ -40,7 +40,7 @@ function Glossary() {
           {entries.map((g) => (
             <div class="gl-entry" key={g.term}>
               <dt>
-                {g.term} <span class={`svc svc-${g.service.toLowerCase()}`}>{g.service}</span>
+                {g.term} <span class={`svc svc-${g.service}`}>{SERVICE_LABEL[g.service]}</span>
               </dt>
               <dd>{g.text}</dd>
             </div>

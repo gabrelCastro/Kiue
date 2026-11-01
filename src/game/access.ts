@@ -19,10 +19,10 @@ export const GUEST_SANDBOX: Level = {
   objective: 'Experimente à vontade. Visitantes têm menos peças; crie uma conta para liberar o sandbox completo.',
   palette: [
     { kind: 'producer', label: 'Produtor', name: 'Produtor', count: 1 },
-    { kind: 'topic', label: 'Tópico SNS', name: 'topico', count: 1 },
-    { kind: 'queue', label: 'Fila SQS', name: 'fila', count: 2 },
+    { kind: 'topic', label: 'Tópico', name: 'topico', count: 1 },
+    { kind: 'queue', label: 'Fila', name: 'fila', count: 2 },
     { kind: 'consumer', label: 'Consumidor', name: 'Consumidor', count: 2 },
-    { kind: 'lambda', label: 'Função Lambda', name: 'funcao', count: 1 },
+    { kind: 'lambda', label: 'Função sob demanda', name: 'funcao', count: 1 },
   ],
 };
 

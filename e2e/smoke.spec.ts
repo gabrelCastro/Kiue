@@ -32,10 +32,10 @@ test('joga a fase 1 pela interface e vence com 3 estrelas', async ({ page }) => 
   await shot(page, '02-briefing');
   await page.getByRole('button', { name: 'Começar' }).click();
 
-  await page.getByRole('button', { name: /Fila SQS/ }).click();
+  await page.getByRole('button', { name: /^Fila(?! \()/ }).click();
   await page.waitForTimeout(300);
   await clickWorld(page, 0, 0, 0);
-  await expect(page.locator('.inspector-head')).toContainText('Fila SQS');
+  await expect(page.locator('.inspector-head')).toContainText('Fila');
 
   await clickWorld(page, -7, 0, 0.5);
   await page.getByRole('button', { name: '⟶ Conectar' }).click();

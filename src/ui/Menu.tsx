@@ -41,7 +41,7 @@ export function Menu() {
         <header class="menu-hero">
           <Showcase />
           <div class="hero-copy">
-            <span class="hero-kicker">Amazon SQS e SNS na prática</span>
+            <span class="hero-kicker">Filas e mensageria na prática</span>
             <h1>Kiuê</h1>
             <p>Monte arquiteturas de mensageria e veja cada mensagem sair do produtor, esperar na fila e ser processada pelos consumidores.</p>
             <div class="hero-actions">
@@ -67,14 +67,14 @@ export function Menu() {
           <Track
             track="certificacao"
             title="Trilha Certificação"
-            subtitle="O que cai na prova AWS Developer e Solutions Architect: Lambda, heartbeat, retries do SNS, cotas e limites."
+            subtitle="O que cai nas certificações de nuvem: funções sob demanda, heartbeat, novas tentativas, cotas e limites."
             levels={CATALOG.filter((l) => l.track === 'certificacao')}
             next={next?.level.id}
           />
         </div>
         <SavedSandboxes />
         <footer class="menu-footer muted small">
-          Simulação didática: tempos e limites são reduzidos para caber num jogo, mas as regras seguem o comportamento do SQS/SNS.{' '}
+          Simulação didática: tempos e limites são reduzidos para caber num jogo, mas as regras seguem o comportamento de serviços de fila reais.{' '}
           <button
             class="linklike"
             onClick={() => {
@@ -84,6 +84,10 @@ export function Menu() {
           >
             Apagar progresso
           </button>
+          <p class="trademark">
+            Projeto educacional independente, sem afiliação com a Amazon Web Services. Fila, tópico e função sob demanda correspondem aos conceitos de serviços como
+            Amazon SQS, Amazon SNS e AWS Lambda, marcas dos respectivos donos.
+          </p>
         </footer>
       </div>
     </div>

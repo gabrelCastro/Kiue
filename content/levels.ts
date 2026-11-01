@@ -15,15 +15,15 @@ const l3 = defineLevel('i03', {
   hint: 'Coloque mais consumidores lendo a MESMA fila. Cada mensagem vai para apenas um deles, então eles dividem o trabalho.',
   lesson: [
     'Vários consumidores na mesma fila competem pelas mensagens: cada mensagem é entregue a um só (enquanto está em voo, fica invisível para os outros).',
-    'Esse é o jeito clássico de escalar horizontalmente um processamento com SQS.',
-    'Na AWS isso costuma ser feito com Auto Scaling baseado na métrica ApproximateNumberOfMessagesVisible.',
+    'Esse é o jeito clássico de escalar horizontalmente um processamento com fila.',
+    'Na nuvem isso costuma ser feito com autoscaling baseado na métrica de mensagens visíveis na fila.',
   ],
   quiz: [
     {
-      question: 'Três consumidores leem da mesma fila SQS. Uma mensagem é entregue para…',
+      question: 'Três consumidores leem da mesma fila. Uma mensagem é entregue para…',
       options: ['Os três consumidores', 'Apenas um deles', 'Nenhum, até todos confirmarem'],
       answer: 1,
-      explanation: 'Fila = consumo competitivo. Para todos receberem a mesma mensagem, você precisa de fan-out (SNS), que é o próximo assunto.',
+      explanation: 'Fila = consumo competitivo. Para todos receberem a mesma mensagem, você precisa de fan-out (tópico), que é o próximo assunto.',
     },
   ],
   concepts: [],
@@ -53,26 +53,26 @@ const l4 = defineLevel('i04', {
   story:
     'Cada pedido agora precisa chegar a TRÊS sistemas: Estoque (baixa o produto), E-mail (avisa o cliente) e Faturamento (emite a nota). Todos precisam receber TODOS os pedidos.',
   objective: 'Faça cada pedido chegar aos três sistemas.',
-  hint: 'Se você ligar uma fila só nos três consumidores, eles vão dividir os pedidos (lembra da fase anterior?). Use um tópico SNS: ele entrega uma cópia para cada fila assinante.',
+  hint: 'Se você ligar uma fila só nos três consumidores, eles vão dividir os pedidos (lembra da fase anterior?). Use um tópico: ele entrega uma cópia para cada fila assinante.',
   lesson: [
-    'SNS é publish/subscribe: o produtor publica uma vez e o tópico entrega uma cópia para cada assinatura.',
-    'O padrão "SNS → várias SQS" (fan-out) dá a cada sistema a própria fila, com o próprio ritmo, retries e DLQ.',
-    'SNS é push e não guarda mensagens; quem guarda é a fila. Por isso as filas ficam entre o tópico e os consumidores.',
-    'Na AWS, a fila precisa de uma policy permitindo sqs:SendMessage a partir do ARN do tópico.',
+    'Tópico é publish/subscribe: o produtor publica uma vez e o tópico entrega uma cópia para cada assinatura.',
+    'O padrão "tópico → várias filas" (fan-out) dá a cada sistema a própria fila, com o próprio ritmo, retries e DLQ.',
+    'O tópico é push e não guarda mensagens; quem guarda é a fila. Por isso as filas ficam entre o tópico e os consumidores.',
+    'Nos serviços reais, a fila precisa de uma permissão que deixe o tópico enviar mensagens para ela.',
   ],
   quiz: [
     {
-      question: 'Por que colocar filas SQS entre o tópico SNS e os consumidores?',
+      question: 'Por que colocar filas entre o tópico e os consumidores?',
       options: [
-        'Porque o SNS não consegue entregar direto para nada',
+        'Porque o tópico não consegue entregar direto para nada',
         'Para cada consumidor ter um buffer próprio: se um ficar lento ou cair, não perde mensagens nem atrasa os outros',
         'Para garantir ordem entre os consumidores',
       ],
       answer: 1,
-      explanation: 'O SNS entrega na hora e não armazena. A fila de cada assinante guarda as mensagens até o consumidor dar conta.',
+      explanation: 'O tópico entrega na hora e não armazena. A fila de cada assinante guarda as mensagens até o consumidor dar conta.',
     },
     {
-      question: 'Um tópico SNS com 3 filas assinantes recebe 10 mensagens. Quantas mensagens chegam às filas no total?',
+      question: 'Um tópico com 3 filas assinantes recebe 10 mensagens. Quantas mensagens chegam às filas no total?',
       options: ['10', '30', '3'],
       answer: 1,
       explanation: 'Cada assinatura recebe a sua cópia: 10 × 3 = 30.',
@@ -80,8 +80,8 @@ const l4 = defineLevel('i04', {
   ],
   concepts: [],
   palette: [
-    { kind: 'topic', label: 'Tópico SNS', name: 'pedidos-criados', count: 1 },
-    { kind: 'queue', label: 'Fila SQS', name: 'fila', count: 3 },
+    { kind: 'topic', label: 'Tópico', name: 'pedidos-criados', count: 1 },
+    { kind: 'queue', label: 'Fila', name: 'fila', count: 3 },
   ],
   graph: {
     nodes: [
@@ -121,12 +121,12 @@ const l5 = defineLevel('i05', {
     'Uma filter policy fica na assinatura (subscription), não no tópico nem na fila.',
     'Ela avalia os atributos da mensagem (MessageAttributes) — ou o corpo, se você usar FilterPolicyScope=MessageBody.',
     'Valores em lista funcionam como OU; chaves diferentes funcionam como E. Também existem operadores como anything-but, prefix, numeric e exists.',
-    'Filtrar no SNS evita que cada consumidor receba, pague e descarte mensagens que não usa.',
+    'Filtrar no tópico evita que cada consumidor receba, pague e descarte mensagens que não usa.',
   ],
   quiz: [
     {
-      question: 'Onde se configura a filter policy do SNS?',
-      options: ['No tópico', 'Na assinatura (subscription)', 'Na fila SQS'],
+      question: 'Onde se configura a filter policy de um tópico?',
+      options: ['No tópico', 'Na assinatura (subscription)', 'Na fila'],
       answer: 1,
       explanation: 'Cada assinatura tem a sua filter policy; o mesmo tópico pode ter assinantes com filtros diferentes.',
     },
@@ -138,7 +138,7 @@ const l5 = defineLevel('i05', {
     },
   ],
   concepts: ['filter'],
-  palette: [{ kind: 'queue', label: 'Fila SQS', name: 'fila', count: 3 }],
+  palette: [{ kind: 'queue', label: 'Fila', name: 'fila', count: 3 }],
   graph: {
     nodes: [
       P('site', 'Site da loja', -8, 0, { rate: 1.5, total: 30, types: LIVRO_ELETRO_ROUPA }),
@@ -174,19 +174,19 @@ const l6 = defineLevel('i06', {
   story:
     'Alguns pedidos chegam corrompidos (cubos escuros). O consumidor falha toda vez que tenta processá-los, não apaga a mensagem, ela volta para a fila… e assim para sempre.',
   objective: 'Mande as mensagens venenosas para uma dead-letter queue (DLQ) e processe todo o resto.',
-  hint: 'Coloque uma segunda fila (ela será a DLQ; não precisa de consumidor). Depois selecione a fila de pedidos e escolha a DLQ e o maxReceiveCount no inspetor.',
+  hint: 'Coloque uma segunda fila (ela será a DLQ; não precisa de consumidor). Depois selecione a fila de pedidos e escolha a DLQ e o máximo de recebimentos no inspetor.',
   lesson: [
-    'Quando o consumidor não apaga a mensagem, ela volta a ficar visível após o visibility timeout e o ApproximateReceiveCount aumenta.',
-    'A redrive policy (deadLetterTargetArn + maxReceiveCount) move para a DLQ a mensagem recebida mais vezes do que o limite.',
-    'A DLQ é uma fila SQS comum. Use-a para investigar, alarmar (CloudWatch) e reprocessar (redrive de volta para a origem).',
+    'Quando o consumidor não apaga a mensagem, ela volta a ficar visível após o visibility timeout e o contador de recebimentos aumenta.',
+    'A política de redrive (qual é a DLQ + máximo de recebimentos) move para a DLQ a mensagem recebida mais vezes do que o limite.',
+    'A DLQ é uma fila comum. Use-a para investigar, alarmar (monitoramento) e reprocessar (redrive de volta para a origem).',
     'A DLQ de uma fila Standard precisa ser Standard; a de uma FIFO precisa ser FIFO.',
   ],
   quiz: [
     {
-      question: 'Com maxReceiveCount = 3, quando a mensagem vai para a DLQ?',
+      question: 'Com máximo de recebimentos = 3, quando a mensagem vai para a DLQ?',
       options: ['Na primeira falha', 'Depois de ter sido recebida 3 vezes sem ser apagada', 'Quando a retenção expira'],
       answer: 1,
-      explanation: 'Quando o receive count passa do maxReceiveCount, o SQS move a mensagem para a DLQ em vez de entregá-la de novo.',
+      explanation: 'Quando o número de recebimentos passa do máximo configurado, a fila move a mensagem para a DLQ em vez de entregá-la de novo.',
     },
     {
       question: 'Uma fila FIFO pode usar uma fila Standard como DLQ?',
@@ -196,7 +196,7 @@ const l6 = defineLevel('i06', {
     },
   ],
   concepts: ['dlq', 'visibility'],
-  palette: [{ kind: 'queue', label: 'Fila SQS (DLQ)', name: 'fila-pedidos-dlq', count: 1 }],
+  palette: [{ kind: 'queue', label: 'Fila (DLQ)', name: 'fila-pedidos-dlq', count: 1 }],
   graph: {
     nodes: [
       P('site', 'Site da loja', -7, 0, { rate: 1, total: 30, poisonRate: 0.15 }),
@@ -220,20 +220,20 @@ const l7 = defineLevel('i07', {
   objective: 'Nenhum pedido pode ser processado duas vezes.',
   hint: 'Enquanto a mensagem está "em voo", ela fica invisível. Se o visibility timeout acabar antes do processamento, outro consumidor pega a mesma mensagem. Ajuste o timeout para ser maior que o tempo de processamento.',
   lesson: [
-    'O visibility timeout precisa ser maior que o tempo máximo de processamento (a AWS recomenda folga; o padrão é 30 s e o máximo, 12 h).',
-    'Se o timeout acabar, a mensagem reaparece e outro consumidor a processa de novo. O DeleteMessage do primeiro falha, pois o receipt handle dele ficou velho.',
-    'Para processamentos longos e variáveis, o consumidor pode estender o prazo com ChangeMessageVisibility (heartbeat).',
+    'O visibility timeout precisa ser maior que o tempo máximo de processamento (deixe folga; o padrão costuma ser 30 s e o máximo, 12 h).',
+    'Se o timeout acabar, a mensagem reaparece e outro consumidor a processa de novo. O delete do primeiro falha, pois o receipt handle dele ficou velho.',
+    'Para processamentos longos e variáveis, o consumidor pode estender o prazo da visibilidade enquanto trabalha (heartbeat).',
   ],
   quiz: [
     {
       question: 'O processamento leva até 40 s e o visibility timeout é de 30 s. O que acontece?',
       options: [
-        'Nada; o SQS espera o consumidor terminar',
+        'Nada; a fila espera o consumidor terminar',
         'A mensagem volta a ficar visível e pode ser processada de novo por outro consumidor',
         'A mensagem vai direto para a DLQ',
       ],
       answer: 1,
-      explanation: 'O SQS não sabe que você ainda está processando. Aumente o timeout ou chame ChangeMessageVisibility periodicamente.',
+      explanation: 'A fila não sabe que você ainda está processando. Aumente o timeout ou estenda a visibilidade da mensagem periodicamente (heartbeat).',
     },
   ],
   concepts: ['visibility'],
@@ -261,12 +261,12 @@ const l8 = defineLevel('i08', {
   lesson: [
     'A fila Standard entrega cada mensagem pelo menos uma vez (at-least-once): duplicatas são raras, mas acontecem.',
     'Produtores também geram duplicatas (retry depois de um timeout de rede).',
-    'A solução robusta é a idempotência: guarde um ID do pedido (ex.: numa tabela DynamoDB com escrita condicional) e ignore o que já foi processado.',
+    'A solução robusta é a idempotência: guarde um ID do pedido (ex.: numa tabela com escrita condicional) e ignore o que já foi processado.',
     'Filas FIFO têm deduplicação (exactly-once processing dentro de uma janela de 5 min), mas com limite de vazão e custo maiores.',
   ],
   quiz: [
     {
-      question: 'Qual a garantia de entrega da fila SQS Standard?',
+      question: 'Qual a garantia de entrega de uma fila Standard?',
       options: ['Exatamente uma vez', 'Pelo menos uma vez (at-least-once)', 'No máximo uma vez'],
       answer: 1,
       explanation: 'Standard: at-least-once e ordem best-effort. FIFO: exactly-once processing e ordem por grupo.',
@@ -296,20 +296,20 @@ const l8 = defineLevel('i08', {
 
 const l9 = defineLevel('i09', {
   story:
-    'O banco digital processa movimentações de conta: depósito, saque, depósito… Se um saque for processado antes do depósito anterior, o cliente fica negativo sem motivo. Cada cubo é colorido pelo cliente (MessageGroupId).',
+    'O banco digital processa movimentações de conta: depósito, saque, depósito… Se um saque for processado antes do depósito anterior, o cliente fica negativo sem motivo. Cada cubo é colorido pelo cliente (o ID do grupo).',
   objective: 'As movimentações de cada cliente devem ser processadas na ordem em que foram feitas.',
-  hint: 'A fila Standard tem ordem "best-effort" e dois consumidores em paralelo embaralham ainda mais. Selecione a fila e mude o tipo para FIFO: ela garante ordem por MessageGroupId.',
+  hint: 'A fila Standard tem ordem "best-effort" e dois consumidores em paralelo embaralham ainda mais. Selecione a fila e mude o tipo para FIFO: ela garante ordem por ID do grupo.',
   lesson: [
-    'A fila FIFO garante ordem dentro de cada MessageGroupId (aqui, um grupo por cliente).',
+    'A fila FIFO garante ordem dentro de cada grupo de mensagens (aqui, um grupo por cliente).',
     'Enquanto uma mensagem de um grupo está em voo, as próximas do mesmo grupo esperam. Grupos diferentes são processados em paralelo.',
     'Escolha o group ID com cuidado: um grupo só = tudo em série; um grupo por entidade (cliente, conta) = paralelismo com ordem.',
-    'Na AWS não dá para converter uma fila Standard em FIFO: crie uma nova (o nome precisa terminar em .fifo).',
+    'Nos serviços reais não dá para converter uma fila Standard em FIFO: é preciso criar uma nova.',
     'Repare na latência: ordem tem preço. Mensagens do mesmo grupo esperam umas pelas outras, e filas FIFO têm limite de vazão menor que as Standard.',
   ],
   quiz: [
     {
       question: 'Em uma fila FIFO, a ordem é garantida…',
-      options: ['Globalmente, para a fila toda', 'Dentro de cada MessageGroupId', 'Só se houver um único consumidor'],
+      options: ['Globalmente, para a fila toda', 'Dentro de cada grupo de mensagens', 'Só se houver um único consumidor'],
       answer: 1,
       explanation: 'A ordem é por grupo. Mensagens de grupos diferentes podem ser processadas em paralelo e em qualquer ordem relativa.',
     },
@@ -340,18 +340,18 @@ const l9 = defineLevel('i09', {
 
 const l10 = defineLevel('i10', {
   story:
-    'O sistema funciona, mas a conta da AWS assustou: milhares de requisições ReceiveMessage, quase todas voltando vazias. Os três consumidores perguntam "tem mensagem?" sem parar (short polling).',
+    'O sistema funciona, mas a conta da nuvem assustou: milhares de requisições de leitura (receive), quase todas voltando vazias. Os três consumidores perguntam "tem mensagem?" sem parar (short polling).',
   objective: 'Processe todos os pedidos usando no máximo 300 chamadas de API.',
-  hint: 'Com long polling (WaitTimeSeconds > 0), o ReceiveMessage espera até chegar mensagem (até 20 s) em vez de voltar vazio na hora. Ajuste o "Wait time" de cada consumidor.',
+  hint: 'Com long polling (wait time > 0), o receive espera até chegar mensagem (até 20 s) em vez de voltar vazio na hora. Ajuste o "Wait time" de cada consumidor.',
   lesson: [
-    'O SQS cobra por requisição (incluindo as que voltam vazias). Um bloco de até 64 KB conta como uma requisição.',
-    'Short polling (WaitTimeSeconds = 0) responde na hora e consulta só parte dos servidores; pode voltar vazio mesmo havendo mensagens.',
+    'O serviço de fila cobra por requisição (incluindo as que voltam vazias). Um bloco de até 64 KB conta como uma requisição.',
+    'Short polling (wait time = 0) responde na hora e consulta só parte dos servidores; pode voltar vazio mesmo havendo mensagens.',
     'Long polling (1 a 20 s) espera chegar mensagem, consulta todos os servidores e reduz drasticamente as respostas vazias.',
-    'Dá para ativar long polling na fila (ReceiveMessageWaitTimeSeconds) ou em cada chamada (WaitTimeSeconds).',
+    'Dá para ativar long polling na configuração da fila ou em cada chamada de receive.',
   ],
   quiz: [
     {
-      question: 'Qual o valor máximo de WaitTimeSeconds no long polling?',
+      question: 'Qual o valor máximo do wait time no long polling?',
       options: ['5 segundos', '20 segundos', '60 segundos'],
       answer: 1,
       explanation: 'O long polling vai de 1 a 20 s. Com 0 é short polling.',
@@ -394,24 +394,24 @@ const c1 = defineLevel('c01', {
   story:
     'O banco quer que cada movimentação vá para o Saldo e para as Notificações, e os dois precisam respeitar a ordem de cada cliente. Cada consumidor roda com 2 workers em paralelo.',
   objective: 'Os dois sistemas recebem todas as movimentações, em ordem por cliente.',
-  hint: 'Para ordem com fan-out você precisa de um tópico SNS FIFO, e ele só entrega para filas SQS FIFO. Ajuste o tipo das peças no inspetor antes de conectar.',
+  hint: 'Para ordem com fan-out você precisa de um tópico FIFO, e ele só entrega para filas FIFO. Ajuste o tipo das peças no inspetor antes de conectar.',
   lesson: [
-    'Tópicos SNS FIFO preservam a ordem por MessageGroupId e deduplicam, assim como as filas FIFO.',
-    'Tópico FIFO só aceita filas SQS FIFO como assinantes; fila FIFO só pode assinar tópico FIFO.',
+    'Tópicos FIFO preservam a ordem por grupo de mensagens (group ID) e deduplicam, assim como as filas FIFO.',
+    'Tópico FIFO só aceita filas FIFO como assinantes; fila FIFO só pode assinar tópico FIFO.',
     'O nome do tópico FIFO também precisa terminar em .fifo.',
   ],
   quiz: [
     {
-      question: 'Um tópico SNS FIFO pode entregar para…',
-      options: ['Qualquer tipo de assinante (Lambda, HTTP, e-mail, SQS)', 'Somente filas SQS FIFO', 'Somente filas SQS Standard'],
+      question: 'Um tópico FIFO pode entregar para…',
+      options: ['Qualquer tipo de assinante (função, HTTP, e-mail, fila)', 'Somente filas FIFO', 'Somente filas Standard'],
       answer: 1,
-      explanation: 'Assinaturas de tópicos FIFO são limitadas a filas SQS FIFO.',
+      explanation: 'Assinaturas de tópicos FIFO são limitadas a filas FIFO.',
     },
   ],
   concepts: ['fifo', 'dedup'],
   palette: [
-    { kind: 'topic', label: 'Tópico SNS', name: 'movimentacoes', count: 1 },
-    { kind: 'queue', label: 'Fila SQS', name: 'fila', count: 2 },
+    { kind: 'topic', label: 'Tópico', name: 'movimentacoes', count: 1 },
+    { kind: 'queue', label: 'Fila', name: 'fila', count: 2 },
   ],
   graph: {
     nodes: [
@@ -445,7 +445,7 @@ const c2 = defineLevel('c02', {
   story:
     'O consumidor vai ficar fora do ar por 90 segundos para manutenção (do segundo 20 ao 110). Alguém configurou a retenção da fila no mínimo possível: 60 segundos.',
   objective: 'Nenhuma mensagem pode se perder durante a manutenção.',
-  hint: 'Mensagens mais velhas que o MessageRetentionPeriod são apagadas pelo SQS, mesmo sem nunca terem sido lidas. Aumente a retenção.',
+  hint: 'Mensagens mais velhas que o período de retenção são apagadas pela fila, mesmo sem nunca terem sido lidas. Aumente a retenção.',
   lesson: [
     'MessageRetentionPeriod vai de 60 s a 14 dias; o padrão é 4 dias.',
     'Mensagens que passam do período são apagadas silenciosamente: não vão para a DLQ.',
@@ -453,7 +453,7 @@ const c2 = defineLevel('c02', {
   ],
   quiz: [
     {
-      question: 'Qual o período máximo de retenção de mensagens no SQS?',
+      question: 'Qual o período máximo de retenção de mensagens numa fila gerenciada típica?',
       options: ['4 dias', '7 dias', '14 dias'],
       answer: 2,
       explanation: 'De 1 minuto a 14 dias, com padrão de 4 dias.',
@@ -462,7 +462,7 @@ const c2 = defineLevel('c02', {
       question: 'Uma mensagem expirou pela retenção. Para onde ela vai?',
       options: ['Para a DLQ', 'É apagada', 'Volta para o produtor'],
       answer: 1,
-      explanation: 'Expirar pela retenção apaga a mensagem; a DLQ só recebe mensagens que excederam o maxReceiveCount.',
+      explanation: 'Expirar pela retenção apaga a mensagem; a DLQ só recebe mensagens que excederam o máximo de recebimentos.',
     },
   ],
   concepts: ['retention'],
@@ -485,10 +485,10 @@ const c3 = defineLevel('c03', {
   story:
     'Novo requisito do negócio: o cliente pode cancelar o pedido nos primeiros 10 segundos. Nenhum pedido pode ser faturado antes disso.',
   objective: 'Nenhum pedido pode ser processado em menos de 10 segundos.',
-  hint: 'Uma delay queue (DelaySeconds) esconde cada mensagem nova por um tempo antes de ela ficar visível.',
+  hint: 'Uma delay queue (atraso de entrega) esconde cada mensagem nova por um tempo antes de ela ficar visível.',
   lesson: [
-    'DelaySeconds (0 a 900 s = 15 min) atrasa a primeira entrega de cada mensagem.',
-    'Na fila Standard, também dá para definir DelaySeconds por mensagem (message timer). Em filas FIFO só vale o delay da fila.',
+    'O atraso de entrega (0 a 900 s = 15 min) atrasa a primeira entrega de cada mensagem.',
+    'Na fila Standard, também dá para definir o atraso por mensagem (message timer). Em filas FIFO só vale o delay da fila.',
     'Não confunda: delay esconde a mensagem ANTES da primeira entrega; visibility timeout esconde DEPOIS de recebida.',
   ],
   quiz: [
@@ -503,10 +503,10 @@ const c3 = defineLevel('c03', {
       explanation: 'Delay atrasa a entrega inicial; visibility timeout protege a mensagem enquanto um consumidor a processa.',
     },
     {
-      question: 'Qual o máximo de DelaySeconds?',
+      question: 'Qual o máximo do atraso de entrega?',
       options: ['60 s', '15 min', '12 h'],
       answer: 1,
-      explanation: '900 segundos (15 minutos). Para atrasos maiores, use EventBridge Scheduler ou Step Functions.',
+      explanation: '900 segundos (15 minutos). Para atrasos maiores, use um agendador de eventos ou um orquestrador de workflows.',
     },
   ],
   concepts: ['delay'],
@@ -529,18 +529,18 @@ const c4 = defineLevel('c04', {
   story:
     'Para economizar, o time passou a ler lotes de 10 mensagens. Cada mensagem leva ~0,5 s, então um lote inteiro leva ~5 s… mas o visibility timeout é de 4 s. Pedidos começaram a duplicar.',
   objective: 'Sem duplicatas e com no máximo 200 chamadas de API.',
-  hint: 'O visibility timeout começa a contar no ReceiveMessage para TODAS as mensagens do lote. Ele precisa cobrir o lote inteiro, não só uma mensagem.',
+  hint: 'O visibility timeout começa a contar no receive para TODAS as mensagens do lote. Ele precisa cobrir o lote inteiro, não só uma mensagem.',
   lesson: [
-    'MaxNumberOfMessages vai de 1 a 10. Lotes reduzem chamadas (e custo), mas o lote inteiro precisa caber no visibility timeout.',
-    'DeleteMessageBatch apaga até 10 mensagens numa única chamada.',
+    'O tamanho do lote no receive vai de 1 a 10. Lotes reduzem chamadas (e custo), mas o lote inteiro precisa caber no visibility timeout.',
+    'O delete em lote apaga até 10 mensagens numa única chamada.',
     'Regra prática: visibility timeout > tamanho do lote × tempo por mensagem, com folga.',
   ],
   quiz: [
     {
-      question: 'Quantas mensagens um ReceiveMessage retorna no máximo?',
+      question: 'Quantas mensagens um receive retorna no máximo?',
       options: ['1', '10', '100'],
       answer: 1,
-      explanation: 'MaxNumberOfMessages vai de 1 a 10.',
+      explanation: 'O tamanho do lote no receive vai de 1 a 10.',
     },
     {
       question: 'Lote de 10 mensagens, 6 s por mensagem, processamento sequencial. Qual visibility timeout evita reentrega?',
@@ -573,7 +573,7 @@ const c5 = defineLevel('c05', {
   lesson: [
     'Filas FIFO deduplicam mensagens com o mesmo deduplication ID dentro de uma janela de 5 minutos.',
     'O ID vem do MessageDeduplicationId ou, com ContentBasedDeduplication, do hash SHA-256 do corpo.',
-    'Sem nenhum dos dois, o SendMessage para FIFO falha.',
+    'Sem nenhum dos dois, o envio para a fila FIFO falha.',
     'A deduplicação protege contra retries do produtor; duplicatas causadas por visibility timeout e consumidores ainda exigem cuidado.',
   ],
   quiz: [
@@ -603,28 +603,28 @@ const c5 = defineLevel('c05', {
 
 const c6 = defineLevel('c06', {
   story:
-    'O processamento de pedidos agora é uma função Lambda ligada à fila (event source mapping), com lotes de 10. Quando chega um pedido venenoso, a função lança um erro e… o lote INTEIRO volta para a fila. Pedidos bons são cobrados de novo e, depois de 3 tentativas, vão parar na DLQ junto com o venenoso.',
+    'O processamento de pedidos agora é uma função sob demanda ligada à fila (o leitor da fila a chama com lotes de 10). Quando chega um pedido venenoso, a função lança um erro e… o lote INTEIRO volta para a fila. Pedidos bons são cobrados de novo e, depois de 3 tentativas, vão parar na DLQ junto com o venenoso.',
   objective: 'Só os pedidos venenosos podem ir para a DLQ, e nenhum pedido pode ser cobrado duas vezes.',
-  hint: 'Ative "Report batch item failures" na Lambda: a função passa a devolver só os IDs das mensagens que falharam, e o resto do lote é apagado.',
+  hint: 'Ative "Reportar falhas por item do lote" na função: a função passa a devolver só os IDs das mensagens que falharam, e o resto do lote é apagado.',
   lesson: [
-    'Com SQS como origem, a Lambda recebe um lote; se a função lançar erro, nenhuma mensagem do lote é apagada e todas voltam após o visibility timeout.',
-    'Com ReportBatchItemFailures, a função devolve { batchItemFailures: [{ itemIdentifier }] } e só essas mensagens voltam para a fila.',
+    'Com fila como origem, a função recebe um lote; se a função lançar erro, nenhuma mensagem do lote é apagada e todas voltam após o visibility timeout.',
+    'Com falhas por item do lote, a função devolve a lista de IDs que falharam e só essas mensagens voltam para a fila.',
     'Lote menor (batch size 1) também resolve, mas multiplica invocações e chamadas.',
-    'A AWS recomenda visibility timeout da fila de pelo menos 6× o timeout da função, para cobrir os retries do próprio poller.',
+    'A recomendação é visibility timeout da fila de pelo menos 6× o timeout da função, para cobrir os retries do próprio poller.',
   ],
   quiz: [
     {
-      question: 'Uma Lambda com batch size 10 lança exceção no 7º registro. O que acontece por padrão?',
+      question: 'Uma função com batch size 10 lança exceção no 7º registro. O que acontece por padrão?',
       options: [
         'Os 6 primeiros são apagados e só os outros 4 voltam',
         'Nenhuma mensagem é apagada: o lote inteiro volta após o visibility timeout',
         'O lote vai direto para a DLQ',
       ],
       answer: 1,
-      explanation: 'Sem ReportBatchItemFailures, a invocação é tratada como falha do lote inteiro.',
+      explanation: 'Sem reportar falhas por item, a invocação é tratada como falha do lote inteiro.',
     },
     {
-      question: 'O timeout da função é 30 s. Qual visibility timeout a AWS recomenda para a fila?',
+      question: 'O timeout da função é 30 s. Qual visibility timeout é recomendado para a fila?',
       options: ['30 s', 'Pelo menos 180 s (6×)', '12 horas'],
       answer: 1,
       explanation: 'A recomendação é pelo menos 6× o timeout da função.',
@@ -649,21 +649,21 @@ const c6 = defineLevel('c06', {
 
 const c7 = defineLevel('c07', {
   story:
-    'Na promoção relâmpago, a fila encheu e a Lambda fez o que sabe fazer: escalou. Só que cada invocação abre uma conexão com o banco de dados, que aguenta no máximo 4 ao mesmo tempo. O resto é recusado.',
+    'Na promoção relâmpago, a fila encheu e a função fez o que sabe fazer: escalou. Só que cada invocação abre uma conexão com o banco de dados, que aguenta no máximo 4 ao mesmo tempo. O resto é recusado.',
   objective: 'O banco nunca pode receber mais conexões do que aguenta.',
-  hint: 'Configure a concorrência máxima do event source mapping (MaximumConcurrency). Ela limita quantos lotes a fila entrega à função ao mesmo tempo, sem precisar mexer na concorrência reservada da função.',
+  hint: 'Configure a concorrência máxima do leitor da fila. Ela limita quantos lotes a fila entrega à função ao mesmo tempo, sem precisar mexer na concorrência reservada da função.',
   lesson: [
-    'Com SQS, o event source mapping começa com alguns pollers e escala enquanto houver mensagens na fila.',
-    'MaximumConcurrency (2 a 1.000) limita quantas invocações simultâneas o mapeamento dispara, protegendo recursos como bancos de dados.',
+    'Com fila como origem, o leitor começa com alguns pollers e escala enquanto houver mensagens na fila.',
+    'A concorrência máxima (2 a 1.000) limita quantas invocações simultâneas o leitor dispara, protegendo recursos como bancos de dados.',
     'Antes dela existir, o comum era usar concorrência reservada (reserved concurrency), mas isso gera throttling e mensagens voltando para a fila.',
     'A fila absorve o excesso: com concorrência limitada, as mensagens só esperam um pouco mais.',
   ],
   quiz: [
     {
-      question: 'Qual configuração limita as invocações simultâneas disparadas por uma fila SQS sem causar throttling na função?',
-      options: ['Reserved concurrency da função', 'MaximumConcurrency do event source mapping', 'Batch size'],
+      question: 'Qual configuração limita as invocações simultâneas disparadas por uma fila sem causar throttling na função?',
+      options: ['Reserved concurrency da função', 'Concorrência máxima do leitor da fila', 'Batch size'],
       answer: 1,
-      explanation: 'MaximumConcurrency é aplicada no mapeamento: o poller simplesmente não busca mais lotes do que o limite.',
+      explanation: 'A concorrência máxima é aplicada no leitor: o poller simplesmente não busca mais lotes do que o limite.',
     },
   ],
   concepts: ['lambda'],
@@ -686,11 +686,11 @@ const c8 = defineLevel('c08', {
   story:
     'Gerar a nota fiscal leva de meio segundo a quase 8 segundos, e o visibility timeout da fila é de 5 s. Notas saem duplicadas. Aumentar o timeout para 60 s resolveria… mas o serviço reinicia de vez em quando, e aí os pedidos que estavam com ele ficariam um minuto parados.',
   objective: 'Nenhuma nota duplicada e nenhum pedido esperando mais de 25 s.',
-  hint: 'Mantenha o timeout curto e ative o heartbeat: enquanto processa, o consumidor chama ChangeMessageVisibility para estender o prazo. Se ele cair, o heartbeat para e a mensagem volta rápido.',
+  hint: 'Mantenha o timeout curto e ative o heartbeat: enquanto processa, o consumidor estende o prazo da visibilidade. Se ele cair, o heartbeat para e a mensagem volta rápido.',
   lesson: [
-    'ChangeMessageVisibility muda o visibility timeout de uma mensagem já recebida (contando a partir de agora).',
+    'Estender a visibilidade muda o visibility timeout de uma mensagem já recebida (contando a partir de agora).',
     'O padrão "heartbeat" estende o prazo periodicamente enquanto o processamento continua: timeout curto para falhas, sem duplicar trabalho longo.',
-    'Também dá para usar ChangeMessageVisibility com 0 para devolver uma mensagem imediatamente à fila.',
+    'Também dá para mudar a visibilidade para 0 e devolver uma mensagem imediatamente à fila.',
     'O total de visibilidade de uma mensagem não pode passar de 12 horas desde o primeiro recebimento.',
   ],
   quiz: [
@@ -698,14 +698,14 @@ const c8 = defineLevel('c08', {
       question: 'O processamento varia de 1 s a 10 min. Qual a melhor estratégia?',
       options: [
         'Visibility timeout de 12 h para nunca duplicar',
-        'Timeout curto + ChangeMessageVisibility periódico enquanto processa',
+        'Timeout curto + estender a visibilidade periodicamente enquanto processa',
         'Short polling',
       ],
       answer: 1,
       explanation: 'Um timeout enorme deixa a mensagem presa por horas se o consumidor morrer. O heartbeat combina segurança e recuperação rápida.',
     },
     {
-      question: 'O que ChangeMessageVisibility com VisibilityTimeout = 0 faz?',
+      question: 'O que mudar a visibilidade de uma mensagem recebida para 0 faz?',
       options: ['Apaga a mensagem', 'Torna a mensagem visível de novo imediatamente', 'Desativa a fila'],
       answer: 1,
       explanation: 'É um jeito de "devolver" uma mensagem à fila sem esperar o prazo.',
@@ -729,31 +729,31 @@ const c8 = defineLevel('c08', {
 
 const c9 = defineLevel('c09', {
   story:
-    'Além do Estoque, um parceiro de entregas recebe cada pedido por um webhook HTTPS assinado no tópico. Ele vai ficar fora do ar por 35 segundos. O SNS tenta entregar de novo algumas vezes, mas depois desiste e o pedido some.',
+    'Além do Estoque, um parceiro de entregas recebe cada pedido por um webhook HTTPS assinado no tópico. Ele vai ficar fora do ar por 35 segundos. O tópico tenta entregar de novo algumas vezes, mas depois desiste e o pedido some.',
   objective: 'Nenhum pedido pode se perder, nem mesmo os do parceiro.',
-  hint: 'Assinaturas SNS também podem ter DLQ (RedrivePolicy da assinatura). Coloque uma fila e escolha-a como "DLQ da assinatura" na conexão tópico → Parceiro (selecione o tópico).',
+  hint: 'Assinaturas de tópico também podem ter DLQ (política de redrive da assinatura). Coloque uma fila e escolha-a como "DLQ da assinatura" na conexão tópico → Parceiro (selecione o tópico).',
   lesson: [
-    'O SNS retenta entregas que falham conforme a delivery policy. Para HTTP/S, o padrão é 3 retries com 20 s de intervalo; para SQS e Lambda, a AWS tenta por muito mais tempo.',
-    'Esgotadas as tentativas, a mensagem é descartada, a menos que a assinatura tenha uma DLQ (fila SQS) configurada na RedrivePolicy.',
+    'O tópico retenta entregas que falham conforme a política de entrega. Para HTTP/S, um padrão comum é 3 retries com 20 s de intervalo; para filas e funções, tenta-se por muito mais tempo.',
+    'Esgotadas as tentativas, a mensagem é descartada, a menos que a assinatura tenha uma DLQ (uma fila) configurada na política de redrive.',
     'A DLQ é da ASSINATURA, não do tópico: cada assinante pode ter a sua.',
-    'Se o destino aceitasse ler uma fila, o melhor seria SNS → SQS → consumidor, e a própria fila seguraria as mensagens.',
+    'Se o destino aceitasse ler uma fila, o melhor seria tópico → fila → consumidor, e a própria fila seguraria as mensagens.',
   ],
   quiz: [
     {
-      question: 'Onde se configura a DLQ para entregas do SNS que falharam?',
-      options: ['No tópico', 'Na assinatura (RedrivePolicy da subscription)', 'No produtor'],
+      question: 'Onde se configura a DLQ para entregas do tópico que falharam?',
+      options: ['No tópico', 'Na assinatura (política de redrive)', 'No produtor'],
       answer: 1,
       explanation: 'Cada assinatura pode ter a sua DLQ; ela recebe as mensagens que esgotaram os retries daquela entrega.',
     },
     {
-      question: 'A DLQ de uma assinatura SNS precisa ser…',
-      options: ['Outro tópico SNS', 'Uma fila SQS (FIFO se o tópico for FIFO)', 'Um bucket S3'],
+      question: 'A DLQ de uma assinatura de tópico precisa ser…',
+      options: ['Outro tópico', 'Uma fila (FIFO se o tópico for FIFO)', 'Um bucket de arquivos'],
       answer: 1,
-      explanation: 'É sempre uma fila SQS, do mesmo tipo do tópico.',
+      explanation: 'É sempre uma fila, do mesmo tipo do tópico.',
     },
   ],
   concepts: ['snsdlq'],
-  palette: [{ kind: 'queue', label: 'Fila SQS (DLQ)', name: 'parceiro-dlq', count: 1 }],
+  palette: [{ kind: 'queue', label: 'Fila (DLQ)', name: 'parceiro-dlq', count: 1 }],
   graph: {
     nodes: [
       P('site', 'Site da loja', -8, 0, { rate: 1, total: 40 }),
@@ -775,17 +775,17 @@ const c9 = defineLevel('c09', {
 
 const c10 = defineLevel('c10', {
   story:
-    'A fila FIFO de pedidos tem três consumidores, mas só um trabalha por vez. O motivo: todo pedido é enviado com o mesmo MessageGroupId, "pedidos". A ordem só importa entre pedidos do mesmo cliente.',
+    'A fila FIFO de pedidos tem três consumidores, mas só um trabalha por vez. O motivo: todo pedido é enviado com o mesmo ID de grupo, "pedidos". A ordem só importa entre pedidos do mesmo cliente.',
   objective: 'Mantenha a ordem por cliente e a latência p95 em até 8 s.',
-  hint: 'Selecione o produtor e use um MessageGroupId por cliente. Grupos diferentes são entregues em paralelo.',
+  hint: 'Selecione o produtor e use um ID de grupo por cliente. Grupos diferentes são entregues em paralelo.',
   lesson: [
     'Em FIFO, mensagens do mesmo grupo são entregues uma de cada vez: um grupo único transforma a fila em fila indiana.',
     'Use como group ID a entidade cuja ordem importa (cliente, conta, pedido). Mais grupos = mais paralelismo.',
-    'Cotas FIFO: 300 transações/s por ação sem lote (até 3.000 mensagens/s com lotes de 10). O high throughput mode aumenta muito esse limite, distribuindo por MessageGroupId.',
+    'Cotas FIFO: 300 transações/s por ação sem lote (até 3.000 mensagens/s com lotes de 10). Um modo de alta vazão aumenta muito esse limite, distribuindo por grupo.',
   ],
   quiz: [
     {
-      question: 'Uma fila FIFO tem 10 consumidores, mas todas as mensagens usam o mesmo MessageGroupId. Quantas são processadas ao mesmo tempo?',
+      question: 'Uma fila FIFO tem 10 consumidores, mas todas as mensagens usam o mesmo ID de grupo. Quantas são processadas ao mesmo tempo?',
       options: ['10', '1', 'Depende do batch size'],
       answer: 1,
       explanation: 'Enquanto uma mensagem do grupo está em voo, as seguintes do mesmo grupo não são entregues.',
@@ -794,7 +794,7 @@ const c10 = defineLevel('c10', {
       question: 'Sem lotes, qual é a cota padrão de uma fila FIFO (sem high throughput)?',
       options: ['300 transações por segundo por ação de API', 'Ilimitada', '10 mensagens por segundo'],
       answer: 0,
-      explanation: '300 TPS por ação (SendMessage, ReceiveMessage, DeleteMessage); com lotes de 10 chega a 3.000 mensagens/s.',
+      explanation: '300 TPS por ação (send, receive, delete); com lotes de 10 chega a 3.000 mensagens/s.',
     },
   ],
   concepts: ['groups'],
@@ -818,33 +818,33 @@ const c10 = defineLevel('c10', {
 
 const c11 = defineLevel('c11', {
   story:
-    'Alguns pedidos agora vêm com o PDF da nota fiscal anexado: cerca de 3 MB. O SendMessage desses pedidos falha com MessageTooLong e eles se perdem.',
+    'Alguns pedidos agora vêm com o PDF da nota fiscal anexado: cerca de 3 MB. O envio desses pedidos falha com "mensagem grande demais" e eles se perdem.',
   objective: 'Nenhum pedido perdido, inclusive os com anexo.',
-  hint: 'O SQS aceita no máximo 1 MiB por mensagem. Ative o Extended Client no produtor: o anexo vai para o S3 e a mensagem leva só a referência.',
+  hint: 'A fila aceita no máximo 1 MiB por mensagem. Ative o claim-check no produtor: o anexo vai para um bucket e a mensagem leva só a referência.',
   lesson: [
-    'O tamanho máximo de uma mensagem SQS é 1 MiB (até agosto de 2025 era 256 KB, número que ainda aparece em muitos materiais). No SNS, o limite é 256 KB.',
+    'Neste jogo a fila aceita até 1 MiB por mensagem e o tópico, 256 KB. Limites assim existem em todo serviço de mensageria e mudam com o tempo: confira a documentação do serviço que você usa.',
     'Cada bloco de 64 KB do payload é cobrado como uma requisição: uma mensagem de 256 KB custa 4.',
-    'Para payloads maiores, guarde o conteúdo no S3 e envie a referência ("claim check"). O Extended Client Library (Java/Python) faz isso de forma transparente.',
-    'Criptografia: SSE-SQS (chaves gerenciadas pelo SQS, padrão em filas novas) ou SSE-KMS (chave do KMS, com controle e auditoria da chave).',
+    'Para payloads maiores, guarde o conteúdo num armazenamento de objetos (bucket) e envie a referência: é o padrão "claim check". Há bibliotecas que fazem isso de forma transparente.',
+    'Criptografia em repouso: com chave gerenciada pelo próprio serviço (o mais simples) ou com chave sua, num serviço de chaves (com controle e auditoria da chave).',
   ],
   quiz: [
     {
-      question: 'Como enviar um arquivo de 5 MB "pelo" SQS?',
-      options: ['Aumentar o limite da fila', 'Guardar o arquivo no S3 e enviar a referência (ex.: Extended Client)', 'Dividir em várias filas'],
+      question: 'Como enviar um arquivo de 5 MB "pela" fila?',
+      options: ['Aumentar o limite da fila', 'Guardar o arquivo num bucket e enviar a referência (claim check)', 'Dividir em várias filas'],
       answer: 1,
-      explanation: 'O limite de 1 MiB não é configurável para cima; o padrão é o claim check com S3.',
+      explanation: 'O limite de tamanho não é configurável para cima; o padrão é o claim check com um bucket.',
     },
     {
-      question: 'Quantas requisições são cobradas por um SendMessage de 200 KB?',
+      question: 'Quantas requisições são cobradas pelo envio de uma mensagem de 200 KB?',
       options: ['1', '4', '200'],
       answer: 1,
       explanation: 'Cada bloco de 64 KB conta como uma requisição: 200 KB = 4 blocos.',
     },
     {
-      question: 'Você precisa auditar o uso da chave de criptografia da fila no CloudTrail. Qual opção?',
-      options: ['SSE-SQS', 'SSE-KMS', 'Nenhuma, o SQS não criptografa'],
+      question: 'Você precisa auditar cada uso da chave de criptografia da fila. Qual opção?',
+      options: ['Chave gerenciada pelo serviço', 'Chave sua, num serviço de chaves', 'Nenhuma, a fila não criptografa'],
       answer: 1,
-      explanation: 'Com SSE-KMS você usa uma chave do KMS, com políticas próprias e chamadas registradas no CloudTrail.',
+      explanation: 'Com uma chave sua num serviço de chaves, você define quem pode usá-la e cada uso fica registrado na auditoria.',
     },
   ],
   concepts: ['payload'],
@@ -865,11 +865,11 @@ const c11 = defineLevel('c11', {
 
 const c13 = defineLevel('c13', {
   story:
-    'Todo dia às 9h a loja abre com uma enxurrada de pedidos, e a Lambda que valida o carrinho acorda junto. Cada instância nova leva 2,5 s para iniciar (carregar o código e abrir as conexões) antes de atender o primeiro pedido. Nos primeiros segundos, os clientes ficam esperando.',
+    'Todo dia às 9h a loja abre com uma enxurrada de pedidos, e a função que valida o carrinho acorda junto. Cada instância nova leva 2,5 s para iniciar (carregar o código e abrir as conexões) antes de atender o primeiro pedido. Nos primeiros segundos, os clientes ficam esperando.',
   objective: 'Latência p95 de no máximo 2,5 s, sem perder nenhum pedido.',
   hint: 'Configure provisioned concurrency na função: essas instâncias ficam iniciadas antes do pico e atendem sem cold start. A concorrência máxima é 10.',
   lesson: [
-    'Cold start é a primeira invocação numa instância nova: antes do handler, o Lambda baixa o código e roda a inicialização (o que fica fora do handler).',
+    'Cold start é a primeira invocação numa instância nova: antes do handler, a plataforma baixa o código e roda a inicialização (o que fica fora do handler).',
     'A inicialização soma latência, mas não conta no timeout da função.',
     'Provisioned concurrency mantém N instâncias já iniciadas numa versão ou alias. É cobrada por hora, mesmo sem invocações; o que passar dela escala sob demanda, com cold start.',
     'Instâncias que ficam paradas são recicladas e esfriam: o próximo pico paga cold start de novo.',
@@ -884,7 +884,7 @@ const c13 = defineLevel('c13', {
         'Aumenta o timeout máximo da função',
       ],
       answer: 1,
-      explanation: 'Ela pré-inicia instâncias. Para limitar a concorrência disparada pela fila, o certo é MaximumConcurrency.',
+      explanation: 'Ela pré-inicia instâncias. Para limitar a concorrência disparada pela fila, o certo é a concorrência máxima do leitor.',
     },
     {
       question: 'O cold start conta no timeout da função?',
@@ -911,18 +911,18 @@ const c13 = defineLevel('c13', {
 
 const c14 = defineLevel('c14', {
   story:
-    'Cada clique no site vira um evento de analytics na fila, uns 3 por segundo. A Lambda que grava os eventos aceita lotes de 10, mas com eventos chegando pingados ela dispara uma invocação para quase cada um. A conta da Lambda chegou alta, e ninguém precisa desses números em menos de alguns segundos.',
+    'Cada clique no site vira um evento de analytics na fila, uns 3 por segundo. A função que grava os eventos aceita lotes de 10, mas com eventos chegando pingados ela dispara uma invocação para quase cada um. A conta das invocações chegou alta, e ninguém precisa desses números em menos de alguns segundos.',
   objective: 'No máximo 60 invocações, com latência p95 de até 4 s.',
-  hint: 'Use a batching window (MaximumBatchingWindowInSeconds) do event source mapping: o poller espera alguns segundos para juntar um lote cheio antes de invocar. Janela demais só aumenta a espera.',
+  hint: 'Use a batching window do leitor da fila: o poller espera alguns segundos para juntar um lote cheio antes de invocar. Janela demais só aumenta a espera.',
   lesson: [
-    'Com fila SQS, o poller do Lambda invoca assim que tem mensagens; com tráfego pingado, isso vira lotes de 1 ou 2.',
-    'MaximumBatchingWindowInSeconds (0 a 300 s) faz o poller esperar até o lote encher (batch size ou 6 MB) ou a janela vencer.',
+    'Com fila como origem, o poller invoca assim que tem mensagens; com tráfego pingado, isso vira lotes de 1 ou 2.',
+    'A batching window (0 a 300 s) faz o poller esperar até o lote encher (batch size ou 6 MB) ou a janela vencer.',
     'Menos invocações: menos custo e menos carga em quem a função chama. Em troca, cada mensagem espera até a janela na fila.',
     'Batch size acima de 10 em fila Standard exige batching window de pelo menos 1 s.',
   ],
   quiz: [
     {
-      question: 'Com batch size 10 e batching window de 5 s, quando a Lambda é invocada?',
+      question: 'Com batch size 10 e batching window de 5 s, quando a função é invocada?',
       options: [
         'Exatamente a cada 5 s',
         'Quando juntar 10 mensagens ou quando a janela de 5 s vencer, o que vier primeiro',
@@ -950,25 +950,25 @@ const c14 = defineLevel('c14', {
 
 const c15 = defineLevel('c15', {
   story:
-    'Todo pedido publicado no tópico "pedido-criado" dispara direto a Lambda que envia o e-mail de confirmação, sem fila no meio. Alguns pedidos chegam com o e-mail inválido e a função falha. Sem fila, ninguém guarda esses pedidos: depois de algumas tentativas, eles somem e o suporte nunca fica sabendo.',
+    'Todo pedido publicado no tópico "pedido-criado" dispara direto a função que envia o e-mail de confirmação, sem fila no meio. Alguns pedidos chegam com o e-mail inválido e a função falha. Sem fila, ninguém guarda esses pedidos: depois de algumas tentativas, eles somem e o suporte nunca fica sabendo.',
   objective: 'Os pedidos que falham não podem se perder: eles precisam ir para a fila "emails-com-falha".',
-  hint: 'Selecione a Lambda e escolha a fila "emails-com-falha" como destino em caso de falha (on-failure). Quando acabarem as novas tentativas, a Lambda manda o evento para lá.',
+  hint: 'Selecione a função e escolha a fila "emails-com-falha" como destino em caso de falha (on-failure). Quando acabarem as novas tentativas, a plataforma manda o evento para lá.',
   lesson: [
-    'O SNS invoca a Lambda de forma assíncrona: o evento entra numa fila interna da Lambda e o SNS considera a entrega feita.',
-    'Se a função falhar, a própria Lambda tenta de novo: até 2 vezes (configurável de 0 a 2), com intervalos crescentes, por até 6 horas.',
-    'Esgotadas as tentativas, o evento vai para o destino de falha (fila SQS, tópico SNS, outra função ou EventBridge), com o motivo do erro. Sem destino, é descartado.',
-    'Por isso a DLQ da assinatura SNS não ajuda aqui: para o SNS, a entrega à Lambda deu certo. Quem precisa do destino é a função.',
-    'Alternativa comum: SNS → SQS → Lambda. A fila guarda as mensagens, permite lotes e a DLQ dela pega as falhas.',
+    'O tópico invoca a função de forma assíncrona: o evento entra numa fila interna da plataforma e o tópico considera a entrega feita.',
+    'Se a função falhar, a própria plataforma tenta de novo: até 2 vezes (configurável de 0 a 2), com intervalos crescentes, por até 6 horas.',
+    'Esgotadas as tentativas, o evento vai para o destino de falha (uma fila, um tópico, outra função ou um barramento de eventos), com o motivo do erro. Sem destino, é descartado.',
+    'Por isso a DLQ da assinatura não ajuda aqui: para o tópico, a entrega à função deu certo. Quem precisa do destino é a função.',
+    'Alternativa comum: tópico → fila → função. A fila guarda as mensagens, permite lotes e a DLQ dela pega as falhas.',
   ],
   quiz: [
     {
-      question: 'O SNS invoca uma Lambda e a função falha em todas as tentativas. Onde configurar para não perder o evento?',
-      options: ['Na DLQ da assinatura SNS', 'No destino de falha (on-failure) da invocação assíncrona da função', 'No visibility timeout'],
+      question: 'O tópico invoca uma função e ela falha em todas as tentativas. Onde configurar para não perder o evento?',
+      options: ['Na DLQ da assinatura do tópico', 'No destino de falha (on-failure) da invocação assíncrona da função', 'No visibility timeout'],
       answer: 1,
-      explanation: 'A entrega SNS → Lambda é aceita na hora (assíncrona). As falhas da função são tratadas pela Lambda: novas tentativas e, depois, o destino de falha.',
+      explanation: 'A entrega tópico → função é aceita na hora (assíncrona). As falhas da função são tratadas pela plataforma: novas tentativas e, depois, o destino de falha.',
     },
     {
-      question: 'Quantas vezes a Lambda tenta de novo uma invocação assíncrona que falhou, por padrão?',
+      question: 'Quantas vezes a plataforma tenta de novo uma invocação assíncrona que falhou, por padrão?',
       options: ['Nenhuma', '2 vezes', 'Até o evento ser processado'],
       answer: 1,
       explanation: 'O padrão (e o máximo) é 2 novas tentativas; dá para reduzir para 0 ou 1 com put-function-event-invoke-config.',
@@ -997,26 +997,26 @@ const c12 = defineLevel('c12', {
   objective: 'Cumpra todos os requisitos ao mesmo tempo.',
   hint: 'Ordem → FIFO de ponta a ponta (tópico e filas). Filtro na assinatura do Estoque. Venenosas → uma DLQ FIFO por fila, e um visibility timeout curto para não travar o grupo por muito tempo.',
   lesson: [
-    'Arquiteturas reais combinam padrões: fan-out com SNS, filtros por assinatura, FIFO onde a ordem importa e DLQ em todas as filas.',
-    'Em filas FIFO, uma mensagem venenosa bloqueia o seu grupo até ir para a DLQ: o visibility timeout e o maxReceiveCount definem quanto tempo o grupo fica parado.',
-    'Monitore as DLQs com alarmes do CloudWatch (ApproximateNumberOfMessagesVisible > 0).',
+    'Arquiteturas reais combinam padrões: fan-out com tópico, filtros por assinatura, FIFO onde a ordem importa e DLQ em todas as filas.',
+    'Em filas FIFO, uma mensagem venenosa bloqueia o seu grupo até ir para a DLQ: o visibility timeout e o máximo de recebimentos definem quanto tempo o grupo fica parado.',
+    'Monitore as DLQs com alarmes (mensagens visíveis na DLQ > 0).',
   ],
   quiz: [
     {
       question: 'Em uma fila FIFO, uma mensagem que sempre falha…',
       options: [
         'Não afeta as outras mensagens',
-        'Bloqueia as próximas mensagens do mesmo MessageGroupId até ser apagada ou ir para a DLQ',
+        'Bloqueia as próximas mensagens do mesmo grupo até ser apagada ou ir para a DLQ',
         'Bloqueia a fila inteira para sempre',
       ],
       answer: 1,
-      explanation: 'Só o grupo dela fica parado. Por isso a DLQ (com maxReceiveCount baixo) é ainda mais importante em FIFO.',
+      explanation: 'Só o grupo dela fica parado. Por isso a DLQ (com máximo de recebimentos baixo) é ainda mais importante em FIFO.',
     },
   ],
   concepts: ['fifo', 'dedup', 'filter', 'dlq', 'visibility', 'idempotency'],
   palette: [
-    { kind: 'topic', label: 'Tópico SNS', name: 'pedidos', count: 1 },
-    { kind: 'queue', label: 'Fila SQS', name: 'fila', count: 6 },
+    { kind: 'topic', label: 'Tópico', name: 'pedidos', count: 1 },
+    { kind: 'queue', label: 'Fila', name: 'fila', count: 6 },
   ],
   graph: {
     nodes: [

@@ -1,7 +1,7 @@
 {
   "name": "Kiuê",
   "short_name": "Kiuê",
-  "description": "Jogo 3D para aprender Amazon SQS e SNS",
+  "description": "Jogo 3D para aprender filas, tópicos e mensageria",
   "lang": "pt-BR",
   "start_url": "./",
   "scope": "./",

@@ -42,7 +42,7 @@ export function describeEvent(e: SimEvent, graph: Graph, verbose: boolean): LogL
     case 'deleted':
       return verbose ? L(`${msgRef(e.token)} apagada de ${name(e.node)}`, 'muted') : null;
     case 'delete_stale':
-      return L(`DeleteMessage de ${msgRef(e.token)} falhou: receipt handle antigo (outro consumidor já a recebeu)`, 'warn');
+      return L(`Apagar ${msgRef(e.token)} falhou: receipt handle antigo (outro consumidor já a recebeu)`, 'warn');
     case 'moved_to_dlq':
       return L(`${name(e.node)} → ${name(e.dlq)}: ${msgRef(e.token)} foi para a DLQ após ${e.receiveCount} recebimentos`, 'dlq');
     case 'expired':
@@ -63,7 +63,7 @@ export function describeEvent(e: SimEvent, graph: Graph, verbose: boolean): LogL
       if (e.reason === 'outage') return L(`${name(e.node)} caiu no meio de ${msgRef(e.token)}`, 'bad');
       return L(`${name(e.node)} falhou ao processar ${msgRef(e.token)}${e.reason === 'poison' ? ' (mensagem venenosa)' : ''}; não apagou`, 'bad');
     case 'empty_receive':
-      return verbose ? L(`${name(e.node)}: ReceiveMessage voltou vazio (e foi cobrado)`, 'muted') : null;
+      return verbose ? L(`${name(e.node)}: leitura (receive) voltou vazia (e foi cobrada)`, 'muted') : null;
     case 'outage_start':
       return L(`${name(e.node)} saiu do ar`, 'bad');
     case 'outage_end':
@@ -89,17 +89,17 @@ export function describeEvent(e: SimEvent, graph: Graph, verbose: boolean): LogL
     case 'cold_start':
       return verbose ? L(`${name(e.node)}: cold start, instância ${e.worker + 1} iniciando (${(e.ms / 1000).toFixed(1)}s antes de processar)`, 'muted') : null;
     case 'visibility_extended':
-      return verbose ? L(`${name(e.node)} estendeu a visibilidade de ${e.count} mensage${e.count === 1 ? 'm' : 'ns'} (ChangeMessageVisibility)`, 'muted') : null;
+      return verbose ? L(`${name(e.node)} estendeu a visibilidade de ${e.count} mensage${e.count === 1 ? 'm' : 'ns'} (heartbeat)`, 'muted') : null;
     case 'sns_retry':
       return L(`${name(e.node)} → ${name(e.target)}: entrega de ${msgRef(e.token)} falhou; nova tentativa (nº${e.attempt})`, 'warn');
     case 'lambda_retry':
-      return L(`${name(e.node)}: invocação assíncrona de ${msgRef(e.token)} falhou; a Lambda tenta de novo (nº${e.attempt})`, 'warn');
+      return L(`${name(e.node)}: invocação assíncrona de ${msgRef(e.token)} falhou; a plataforma tenta de novo (nº${e.attempt})`, 'warn');
     case 'lambda_on_failure':
       return L(`${name(e.node)}: tentativas esgotadas; ${msgRef(e.token)} foi para o destino de falha (${name(e.dlq)})`, 'dlq');
     case 'sns_dlq':
       return L(`${name(e.node)} → ${name(e.target)}: retries esgotados; ${msgRef(e.token)} foi para a DLQ da assinatura (${name(e.dlq)})`, 'dlq');
     case 's3_put':
-      return L(`${name(e.node)} guardou o anexo de ${msgRef(e.token)} no S3 e enviou só o ponteiro`, 'info');
+      return L(`${name(e.node)} guardou o anexo de ${msgRef(e.token)} num bucket e enviou só o ponteiro`, 'info');
   }
 }
 

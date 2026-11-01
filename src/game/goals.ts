@@ -98,7 +98,7 @@ export function evaluateGoal(goal: Goal, sim: Simulation, graph: Graph, final: b
         m.duplicatesProcessed,
         'Nenhum pedido processado duas vezes',
         'duplicadas',
-        'O mesmo pedido gerou efeito duas vezes. Lembre: o SQS Standard é at-least-once e o visibility timeout pode expirar no meio do processamento.',
+        'O mesmo pedido gerou efeito duas vezes. Lembre: a fila Standard é at-least-once e o visibility timeout pode expirar no meio do processamento.',
       );
     case 'noOutOfOrder':
       return zero(m.outOfOrder, 'Nenhum pedido fora de ordem', 'fora de ordem', 'Pedidos do mesmo cliente foram processados fora de ordem.');
@@ -113,7 +113,7 @@ export function evaluateGoal(goal: Goal, sim: Simulation, graph: Graph, final: b
         label: 'Mensagens venenosas vão para a DLQ',
         status: ok ? 'ok' : final ? 'fail' : 'pending',
         detail: `${inDlq}/${poison.length}`,
-        why: final && !ok ? 'As mensagens venenosas ficaram voltando para a fila. Configure uma DLQ com maxReceiveCount.' : undefined,
+        why: final && !ok ? 'As mensagens venenosas ficaram voltando para a fila. Configure uma DLQ com um máximo de recebimentos.' : undefined,
       };
     }
     case 'minLatency': {
@@ -155,7 +155,7 @@ export function evaluateGoal(goal: Goal, sim: Simulation, graph: Graph, final: b
         good,
         'Só mensagens venenosas vão para a DLQ',
         'pedidos bons na DLQ',
-        'Pedidos válidos foram parar na DLQ: eles voltaram para a fila junto com o lote de uma mensagem venenosa até estourar o maxReceiveCount.',
+        'Pedidos válidos foram parar na DLQ: eles voltaram para a fila junto com o lote de uma mensagem venenosa até estourar o máximo de recebimentos.',
       );
     }
     case 'noDbOverload':
@@ -163,7 +163,7 @@ export function evaluateGoal(goal: Goal, sim: Simulation, graph: Graph, final: b
         m.dbOverloads,
         'O banco nunca recebe conexões demais',
         'invocações recusadas pelo banco',
-        'A Lambda escalou além do que o banco aguenta. Limite a concorrência do event source mapping (MaximumConcurrency).',
+        'A função escalou além do que o banco aguenta. Limite a concorrência máxima do leitor da fila.',
       );
     case 'maxApiCalls': {
       const fail = m.apiCalls > goal.max;
@@ -179,11 +179,11 @@ export function evaluateGoal(goal: Goal, sim: Simulation, graph: Graph, final: b
       const fail = m.invocations > goal.max;
       return {
         goal,
-        label: `No máximo ${goal.max} invocações da Lambda`,
+        label: `No máximo ${goal.max} invocações da função`,
         status: fail ? 'fail' : final ? 'ok' : 'pending',
         detail: `${m.invocations}/${goal.max}`,
         why: fail
-          ? 'Invocações demais: cada uma é cobrada. Com a fila recebendo pouco a pouco, a Lambda dispara lotes pequenos; uma batching window espera juntar lotes maiores.'
+          ? 'Invocações demais: cada uma é cobrada. Com a fila recebendo pouco a pouco, a função recebe lotes pequenos; uma batching window espera juntar lotes maiores.'
           : undefined,
       };
     }

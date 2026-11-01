@@ -1006,13 +1006,13 @@ export class SceneView {
         this.effects.spawn(at(e.node), '◷ +visibilidade', 'muted', e.node + 'hb', 600);
         break;
       case 'sns_retry':
-        this.effects.spawn(at(e.target), `↻ SNS tenta de novo (${e.attempt})`, 'warn', e.target + 'retry', 300);
+        this.effects.spawn(at(e.target), `↻ tópico tenta de novo (${e.attempt})`, 'warn', e.target + 'retry', 300);
         break;
       case 'sns_dlq':
         this.effects.spawn(at(e.target), '☠ → DLQ da assinatura', 'dlq');
         break;
       case 's3_put':
-        this.effects.spawn(at(e.node), '⇪ anexo no S3', 'info');
+        this.effects.spawn(at(e.node), '⇪ anexo no bucket', 'info');
         break;
     }
   }

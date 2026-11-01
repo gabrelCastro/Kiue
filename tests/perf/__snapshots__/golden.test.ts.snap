@@ -80,7 +80,7 @@ exports[`fingerprint determinístico > fase c10 1`] = `
 
 exports[`fingerprint determinístico > fase c11 1`] = `
 {
-  "initial": "fe3b3ddf {"now":30250,"produced":30,"processed":23,"lost":7,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":352,"Publish":0,"ReceiveMessage":23,"DeleteMessage":23,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.3,"max":1.3}",
+  "initial": "906a1393 {"now":30250,"produced":30,"processed":23,"lost":7,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":352,"Publish":0,"ReceiveMessage":23,"DeleteMessage":23,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.3,"max":1.3}",
   "solved": "71dfd92d {"now":30200,"produced":30,"processed":30,"lost":0,"dup":0,"ooo":0,"dlq":0,"api":{"SendMessage":30,"Publish":0,"ReceiveMessage":30,"DeleteMessage":30,"DeleteMessageBatch":0,"ChangeMessageVisibility":0,"ChangeMessageVisibilityBatch":0},"p95":1.3,"max":1.3}",
 }
 `;

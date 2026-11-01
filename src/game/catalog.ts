@@ -79,8 +79,8 @@ export function groupColor(groupId: string | null): string | null {
 
 export const KIND_LABEL = {
   producer: 'Produtor',
-  topic: 'Tópico SNS',
-  queue: 'Fila SQS',
+  topic: 'Tópico',
+  queue: 'Fila',
   consumer: 'Consumidor',
-  lambda: 'Função Lambda',
+  lambda: 'Função sob demanda',
 } as const;

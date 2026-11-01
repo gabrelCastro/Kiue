@@ -117,7 +117,7 @@ function QueueConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphNo
           ]}
           disabled={disabled}
           onChange={(v) => set({ fifo: v === 'fifo' })}
-          help="Na AWS o tipo é escolhido na criação e não muda depois; o nome de filas FIFO termina em .fifo."
+          help="No serviço real o tipo é escolhido na criação e não muda depois."
         />
       ) : (
         <p class="kv">
@@ -130,7 +130,7 @@ function QueueConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphNo
           checked={c.contentDedup}
           disabled={disabled}
           onChange={(v) => set({ contentDedup: v })}
-          help="Usa o hash SHA-256 do corpo como ID de deduplicação quando o produtor não manda MessageDeduplicationId."
+          help="Usa o hash SHA-256 do corpo como ID de deduplicação quando o produtor não manda um ID de deduplicação."
         />
       )}
       {ctrl.hasConcept('visibility') && (
@@ -142,7 +142,7 @@ function QueueConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphNo
           unit="s"
           disabled={disabled}
           onChange={(v) => set({ visibilityTimeout: v })}
-          help="Quanto tempo a mensagem fica invisível depois de recebida. Precisa ser maior que o tempo de processamento (do lote inteiro). Na AWS: 0 s a 12 h."
+          help="Quanto tempo a mensagem fica invisível depois de recebida. Precisa ser maior que o tempo de processamento (do lote inteiro). No serviço real: 0 s a 12 h."
         />
       )}
       {ctrl.hasConcept('dlq') ? (
@@ -157,7 +157,7 @@ function QueueConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphNo
           />
           {c.dlq && (
             <NumberField
-              label="maxReceiveCount"
+              label="Máximo de recebimentos"
               value={c.maxReceiveCount}
               min={1}
               max={10}
@@ -170,19 +170,19 @@ function QueueConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphNo
       ) : null}
       {ctrl.hasConcept('delay') && (
         <NumberField
-          label="Delay (DelaySeconds)"
+          label="Atraso de entrega (delay)"
           value={c.delaySeconds}
           min={0}
           max={60}
           unit="s"
           disabled={disabled}
           onChange={(v) => set({ delaySeconds: v })}
-          help="Esconde cada mensagem nova antes da primeira entrega. Na AWS: até 900 s."
+          help="Esconde cada mensagem nova antes da primeira entrega. No serviço real: até 900 s."
         />
       )}
       {ctrl.hasConcept('retention') ? (
         <Select
-          label="Retenção (MessageRetentionPeriod)"
+          label="Retenção"
           value={RETENTION_OPTIONS.some((o) => o.value === c.retention) ? c.retention : 345600}
           options={RETENTION_OPTIONS}
           disabled={disabled}
@@ -210,7 +210,7 @@ function TopicConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphNo
           ]}
           disabled={disabled}
           onChange={(v) => set({ fifo: v === 'fifo' })}
-          help="Tópico FIFO só entrega para filas SQS FIFO (e fila FIFO só assina tópico FIFO)."
+          help="Tópico FIFO só entrega para filas FIFO (e fila FIFO só assina tópico FIFO)."
         />
       ) : (
         <p class="kv">
@@ -259,18 +259,18 @@ function ConsumerConfig({ ctrl, node, disabled }: { ctrl: Controller; node: Grap
       )}
       {ctrl.hasConcept('batch') && (
         <NumberField
-          label="Tamanho do lote (MaxNumberOfMessages)"
+          label="Tamanho do lote"
           value={c.batchSize}
           min={1}
           max={10}
           disabled={disabled}
           onChange={(v) => set({ batchSize: v })}
-          help="Quantas mensagens cada ReceiveMessage pode trazer (1 a 10). Lotes economizam chamadas."
+          help="Quantas mensagens cada receive pode trazer (1 a 10). Lotes economizam chamadas."
         />
       )}
       {ctrl.hasConcept('longpoll') && (
         <NumberField
-          label="Wait time (WaitTimeSeconds)"
+          label="Wait time (long polling)"
           value={c.waitTime}
           min={0}
           max={20}
@@ -291,14 +291,14 @@ function ConsumerConfig({ ctrl, node, disabled }: { ctrl: Controller; node: Grap
       )}
       {ctrl.hasConcept('heartbeat') && (
         <Toggle
-          label="Heartbeat (ChangeMessageVisibility)"
+          label="Heartbeat (estende a visibilidade)"
           checked={c.heartbeat}
           disabled={disabled}
           onChange={(v) => set({ heartbeat: v })}
           help="Enquanto processa, estende o visibility timeout das mensagens recebidas antes que ele expire."
         />
       )}
-      {c.httpOnly && <p class="kv muted small">Endpoint HTTPS de terceiros: recebe chamadas do SNS, não lê filas.</p>}
+      {c.httpOnly && <p class="kv muted small">Endpoint HTTPS de terceiros: recebe chamadas do tópico, não lê filas.</p>}
       {fixed.length > 0 && <Locked text={`Nesta fase: ${fixed.join(', ')}.`} />}
     </>
   );
@@ -312,8 +312,8 @@ function ProducerConfig({ ctrl, node, disabled }: { ctrl: Controller; node: Grap
         <p class="kv">Ritmo: <b>{c.rate}</b> pedidos/s{c.bursts.length ? ` (pico de ${c.bursts[0].multiplier}× aos ${c.bursts[0].at}s)` : ''}</p>
         <p class="kv">Total: <b>{c.total}</b> pedidos</p>
         <p class="kv">Tipos: {c.types.map((t) => <span class="type-chip" style={{ '--c': typeInfo(t.value).color }}>{typeInfo(t.value).label}</span>)}</p>
-        {c.groups > 0 && <p class="kv">MessageGroupId: <b>{c.groups}</b> clientes</p>}
-        {c.dedupId && <p class="kv">Envia MessageDeduplicationId</p>}
+        {c.groups > 0 && <p class="kv">ID de grupo: <b>{c.groups}</b> clientes</p>}
+        {c.dedupId && <p class="kv">Envia ID de deduplicação</p>}
         {c.poisonRate > 0 && <p class="kv">Venenosas: <b>{Math.round(c.poisonRate * 100)}%</b></p>}
         {c.retryRate > 0 && <p class="kv">Retries de rede: <b>{Math.round(c.retryRate * 100)}%</b></p>}
         {c.largeRate > 0 && (
@@ -323,22 +323,22 @@ function ProducerConfig({ ctrl, node, disabled }: { ctrl: Controller; node: Grap
         )}
         {ctrl.hasConcept('groups') && (
           <NumberField
-            label="Clientes distintos (MessageGroupId)"
+            label="Clientes distintos (ID de grupo)"
             value={c.groups}
             min={1}
             max={6}
             disabled={disabled}
             onChange={(v) => ctrl.updateConfig<'producer'>(node.id, { groups: v })}
-            help={c.groups === 1 ? 'Todos os pedidos usam o mesmo MessageGroupId: a fila FIFO entrega um por vez.' : 'Um MessageGroupId por cliente: grupos diferentes são processados em paralelo.'}
+            help={c.groups === 1 ? 'Todos os pedidos usam o mesmo ID de grupo: a fila FIFO entrega um por vez.' : 'Um ID de grupo por cliente: grupos diferentes são processados em paralelo.'}
           />
         )}
         {ctrl.hasConcept('payload') && (
           <Toggle
-            label="Extended Client (payload grande no S3)"
+            label="Claim-check (payload grande num bucket)"
             checked={c.extendedClient}
             disabled={disabled}
             onChange={(v) => ctrl.updateConfig<'producer'>(node.id, { extendedClient: v })}
-            help="Mensagens acima de 256 KB vão para um bucket S3; a fila recebe só a referência."
+            help="Mensagens acima de 256 KB vão para um bucket de armazenamento de objetos; a fila recebe só a referência."
           />
         )}
         <Locked text={ctrl.hasConcept('groups') || ctrl.hasConcept('payload') ? 'O resto do produtor faz parte do cenário.' : 'O produtor faz parte do cenário desta fase.'} />
@@ -365,8 +365,8 @@ function ProducerConfig({ ctrl, node, disabled }: { ctrl: Controller; node: Grap
           ))}
         </div>
       </div>
-      <NumberField label="Clientes (MessageGroupId)" value={c.groups} min={0} max={6} disabled={disabled} onChange={(v) => set({ groups: v })} help="0 = sem MessageGroupId (obrigatório para FIFO)." />
-      <Toggle label="Enviar MessageDeduplicationId" checked={c.dedupId} disabled={disabled} onChange={(v) => set({ dedupId: v })} />
+      <NumberField label="Clientes (ID de grupo)" value={c.groups} min={0} max={6} disabled={disabled} onChange={(v) => set({ groups: v })} help="0 = sem ID de grupo (obrigatório para FIFO)." />
+      <Toggle label="Enviar ID de deduplicação" checked={c.dedupId} disabled={disabled} onChange={(v) => set({ dedupId: v })} />
       <NumberField label="Mensagens venenosas" value={Math.round(c.poisonRate * 100)} min={0} max={50} unit="%" disabled={disabled} onChange={(v) => set({ poisonRate: v / 100 })} />
       <NumberField label="Retries de rede" value={Math.round(c.retryRate * 100)} min={0} max={50} unit="%" disabled={disabled} onChange={(v) => set({ retryRate: v / 100 })} />
     </>
@@ -422,7 +422,7 @@ function SubscriptionDlq({ ctrl, edge }: { ctrl: Controller; edge: GraphEdge }) 
       options={[{ value: '', label: '— nenhuma (descarta após os retries) —' }, ...options.map((q) => ({ value: q.id, label: q.name }))]}
       disabled={!ctrl.canEdit}
       onChange={(v) => ctrl.setEdgeDlq(edge.id, v || null)}
-      help={options.length ? 'Recebe as mensagens que o SNS não conseguiu entregar depois de todos os retries.' : 'Coloque uma fila SQS para usar como DLQ desta assinatura.'}
+      help={options.length ? 'Recebe as mensagens que o tópico não conseguiu entregar depois de todas as novas tentativas.' : 'Coloque uma fila para usar como DLQ desta assinatura.'}
     />
   );
 }
@@ -446,7 +446,7 @@ function LambdaConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphN
       {isAsync && (
         <>
           <p class="kv">
-            Acionada pelo SNS (<b>invocação assíncrona</b>): uma mensagem por invocação. Se a função falhar, a própria Lambda tenta mais 2 vezes.
+            Acionada pelo tópico (<b>invocação assíncrona</b>): uma mensagem por invocação. Se a função falhar, a plataforma tenta mais 2 vezes.
           </p>
           {ctrl.hasConcept('onfailure') ? (
             <Select
@@ -455,7 +455,7 @@ function LambdaConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphN
               options={[{ value: '', label: '— nenhum (o evento se perde) —' }, ...failureQueues.map((q) => ({ value: q.id, label: q.name }))]}
               disabled={disabled}
               onChange={(v) => set({ onFailure: v || null })}
-              help={failureQueues.length ? 'Fila SQS que recebe o evento quando as novas tentativas acabam.' : 'Coloque uma fila SQS Standard para usar como destino de falha.'}
+              help={failureQueues.length ? 'Fila que recebe o evento quando as novas tentativas acabam.' : 'Coloque uma fila Standard para usar como destino de falha.'}
             />
           ) : (
             c.onFailure && (
@@ -472,7 +472,7 @@ function LambdaConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphN
         </p>
       )}
       {!isAsync && vt !== null && vt < c.timeout * 6 && (
-        <p class="locked-hint">Visibility timeout da fila ({vt}s) é menor que 6× o timeout da função ({c.timeout * 6}s), como a AWS recomenda.</p>
+        <p class="locked-hint">Visibility timeout da fila ({vt}s) é menor que 6× o timeout da função ({c.timeout * 6}s), como recomendam os provedores.</p>
       )}
       {!isAsync && ctrl.hasConcept('batch') ? (
         <NumberField
@@ -482,7 +482,7 @@ function LambdaConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphN
           max={10}
           disabled={disabled}
           onChange={(v) => set({ batchSize: v })}
-          help="Mensagens por invocação. Na AWS vai até 10.000 (com batching window)."
+          help="Mensagens por invocação. No serviço real vai até 10.000 (com batching window)."
         />
       ) : (
         !isAsync && (
@@ -494,20 +494,20 @@ function LambdaConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphN
       {isAsync ? null : editable ? (
         <>
           <Toggle
-            label="Report batch item failures"
+            label="Reportar falhas por item do lote"
             checked={c.reportBatchItemFailures}
             disabled={disabled}
             onChange={(v) => set({ reportBatchItemFailures: v })}
             help="A função devolve só os IDs das mensagens que falharam; o resto do lote é apagado."
           />
           <NumberField
-            label="Concorrência máxima (MaximumConcurrency)"
+            label="Concorrência máxima do leitor"
             value={c.maxConcurrency}
             min={0}
             max={20}
             disabled={disabled}
             onChange={(v) => set({ maxConcurrency: v === 1 ? 2 : v })}
-            help={c.maxConcurrency === 0 ? 'Sem limite: escala enquanto houver fila (teto de 20 no jogo).' : 'Invocações simultâneas disparadas pela fila (mínimo 2 na AWS).'}
+            help={c.maxConcurrency === 0 ? 'Sem limite: escala enquanto houver fila (teto de 20 no jogo).' : 'Invocações simultâneas disparadas pela fila (mínimo 2 no serviço real).'}
           />
         </>
       ) : (
@@ -525,8 +525,8 @@ function LambdaConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphN
             (c.reserved ?? 0) === 0
               ? 'Sem reserva. Com reserva, a função nunca passa desse número; o que vier além é recusado (throttling).'
               : isAsync
-                ? 'Acima disso a invocação é recusada (throttling) e a Lambda tenta de novo depois.'
-                : 'Acima disso a invocação é recusada (throttling): o lote não é apagado e só volta depois do visibility timeout. Para limitar o que a fila dispara, prefira MaximumConcurrency.'
+                ? 'Acima disso a invocação é recusada (throttling) e a plataforma tenta de novo depois.'
+                : 'Acima disso a invocação é recusada (throttling): o lote não é apagado e só volta depois do visibility timeout. Para limitar o que a fila dispara, prefira a concorrência máxima do leitor.'
           }
         />
       )}
@@ -564,7 +564,7 @@ function LambdaConfig({ ctrl, node, disabled }: { ctrl: Controller; node: GraphN
       )}
       {!isAsync && ctrl.hasConcept('batchwindow') && (
         <NumberField
-          label="Batching window (MaximumBatchingWindowInSeconds)"
+          label="Batching window"
           value={c.batchWindow ?? 0}
           min={0}
           max={10}
@@ -646,7 +646,7 @@ function RealWorld({ ctrl, node }: { ctrl: Controller; node: GraphNode }) {
   const snippets = snippetsFor(ctrl.graph, node);
   return (
     <div class="realworld">
-      <p class="muted small">O equivalente desta peça na AWS (CLI e SDK v3 para JavaScript):</p>
+      <p class="muted small">Como esta peça ficaria num sistema de verdade: a configuração num formato genérico e o código com um cliente de fila genérico. Cada provedor de nuvem tem o seu equivalente.</p>
       {snippets.map((s) => (
         <div class="snippet">
           <div class="row between">

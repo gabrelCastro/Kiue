@@ -111,7 +111,7 @@ export function mountShowcase(container: HTMLElement, opts: ShowcaseOptions): ()
 
   // peças
   const producer = node('p', 'producer', 'Produtor', -5, {});
-  const queue = node('q', 'queue', 'Fila SQS', 0, { fifo: false });
+  const queue = node('q', 'queue', 'Fila', 0, { fifo: false });
   const consumer = node('c', 'consumer', 'Consumidor', 5, { workers: 3 });
   const views: Record<'p' | 'q' | 'c', NodeView> = {
     p: buildNode(producer, false),
@@ -298,7 +298,7 @@ export function mountShowcase(container: HTMLElement, opts: ShowcaseOptions): ()
     if (tokens.instanceColor) tokens.instanceColor.needsUpdate = true;
 
     setLabel(views.p, 'Produtor', `${sent} enviadas`);
-    setLabel(views.q, 'Fila SQS', `${waiting.length} na fila`);
+    setLabel(views.q, 'Fila', `${waiting.length} na fila`);
     setLabel(views.c, 'Consumidor', `${workers.filter((w) => w.state === 'busy').length}/3 ocupados · ✓ ${done}`);
   }
 

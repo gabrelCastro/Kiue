@@ -26,7 +26,7 @@ test('visitante tem sandbox limitado', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.guest-banner')).toBeVisible();
   await page.getByRole('button', { name: 'Sandbox', exact: true }).click();
-  await expect(page.getByRole('button', { name: /Fila SQS/ })).toContainText('×2');
+  await expect(page.getByRole('button', { name: /^Fila(?! \()/ })).toContainText('×2');
   await expect(page.locator('.sandbox-limit')).toContainText('Sandbox limitado');
   await page.locator('.sandbox-limit').getByRole('button', { name: 'Crie uma conta' }).click();
   await expect(page.getByRole('dialog')).toContainText('até 20 filas');

@@ -41,12 +41,12 @@ export function describeNode(node: GraphNode, ctrl: Controller, sim: Simulation 
       if (cfg.groups > 0) badges.push(badge(`${cfg.groups} grupos`));
       if (cfg.poisonRate > 0) badges.push(badge('venenosas', 'bad'));
       if (cfg.retryRate > 0) badges.push(badge('retries', 'warn'));
-      if (cfg.largeRate > 0) badges.push(badge(cfg.extendedClient ? 'anexos → S3' : 'anexos grandes', cfg.extendedClient ? 'ok' : 'warn'));
+      if (cfg.largeRate > 0) badges.push(badge(cfg.extendedClient ? 'anexos → bucket' : 'anexos grandes', cfg.extendedClient ? 'ok' : 'warn'));
       break;
     }
     case 'topic': {
       const cfg = (node as GraphNode<'topic'>).config;
-      badges.push(badge('SNS', 'sns'));
+      badges.push(badge('tópico', 'sns'));
       if (cfg.fifo) badges.push(badge('FIFO', 'fifo'));
       const subs = ctrl.graph.edges.filter((e) => e.from === node.id).length;
       lines.push(`${subs} assinatura${subs === 1 ? '' : 's'}`);
@@ -55,7 +55,7 @@ export function describeNode(node: GraphNode, ctrl: Controller, sim: Simulation 
     case 'queue': {
       const cfg = (node as GraphNode<'queue'>).config;
       const isDlq = dlqIds(ctrl.graph).has(node.id);
-      badges.push(badge('SQS', 'sqs'));
+      badges.push(badge('fila', 'sqs'));
       if (cfg.fifo) badges.push(badge('FIFO', 'fifo'));
       if (isDlq) badges.push(badge('DLQ', 'bad'));
       const q = sim?.queues.get(node.id);
@@ -95,7 +95,7 @@ export function describeNode(node: GraphNode, ctrl: Controller, sim: Simulation 
     }
     case 'lambda': {
       const cfg = (node as GraphNode<'lambda'>).config;
-      badges.push(badge('Lambda', 'lambda'));
+      badges.push(badge('função', 'lambda'));
       if (cfg.reportBatchItemFailures) badges.push(badge('falha parcial', 'ok'));
       if (cfg.dbLimit > 0) badges.push(badge(`banco: ${cfg.dbLimit} conexões`, 'warn'));
       if ((cfg.provisioned ?? 0) > 0) badges.push(badge(`${v(cfg.provisioned)} provisionadas`, 'ok'));

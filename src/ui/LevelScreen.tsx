@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { useCompact, useTouchUI } from './device';
 import { KIND_LABEL } from '../game/catalog';
+import type { ApiName } from '../sim/metrics';
 import { SPEEDS, type Controller } from '../game/controller';
 import type { GoalResult } from '../game/goals';
 import type { GraphNode } from '../sim/types';
@@ -13,6 +14,17 @@ import { useController, useTicker } from './hooks';
 import { Inspector } from './Inspector';
 import { ResultModal } from './Result';
 import { SandboxFile } from './SandboxFile';
+
+/** Nome de cada chamada contada na simulação, como aparece na dica de "chamadas de API". */
+const API_LABEL: Record<ApiName, string> = {
+  SendMessage: 'enviar',
+  Publish: 'publicar',
+  ReceiveMessage: 'receber',
+  DeleteMessage: 'apagar',
+  DeleteMessageBatch: 'apagar em lote',
+  ChangeMessageVisibility: 'estender visibilidade',
+  ChangeMessageVisibilityBatch: 'estender visibilidade em lote',
+};
 
 export function LevelScreen() {
   const ctrl = useController();
@@ -167,7 +179,7 @@ function Palette() {
       {level.track === 'sandbox' && ctrl.access === 'guest' && (
         <p class="sandbox-limit small">
           Sandbox limitado para visitantes.{' '}
-          <button class="linklike" onClick={() => auth.open('register', { reason: 'Com uma conta, o sandbox libera até 20 filas, 10 tópicos, 20 consumidores e 10 funções Lambda.' })}>
+          <button class="linklike" onClick={() => auth.open('register', { reason: 'Com uma conta, o sandbox libera até 20 filas, 10 tópicos, 20 consumidores e 10 funções sob demanda.' })}>
             Crie uma conta
           </button>{' '}
           para liberar todas as peças e salvar seus sandboxes.
@@ -294,7 +306,7 @@ function Metrics() {
   }
   const apiTitle = Object.entries(m.api)
     .filter(([, v]) => v > 0)
-    .map(([k, v]) => `${k}: ${v}`)
+    .map(([k, v]) => `${API_LABEL[k as ApiName]}: ${v}`)
     .join('\n');
   return (
     <div class="metrics">
@@ -305,9 +317,9 @@ function Metrics() {
       {item('duplicados', m.duplicatesProcessed, m.duplicatesProcessed > 0)}
       {item('fora de ordem', m.outOfOrder, m.outOfOrder > 0)}
       {item('na DLQ', m.movedToDlq)}
-      {item('respostas vazias', m.emptyReceives, false, 'ReceiveMessage que voltou sem mensagens (também é cobrado)')}
+      {item('respostas vazias', m.emptyReceives, false, 'Leituras (receive) que voltaram sem mensagens (também são cobradas)')}
       {item('chamadas de API', m.apiCalls, false, apiTitle)}
-      {ctrl.graph.nodes.some((n) => n.kind === 'lambda') && item('invocações', m.invocations, false, 'Invocações da Lambda (cada uma recebe um lote)')}
+      {ctrl.graph.nodes.some((n) => n.kind === 'lambda') && item('invocações', m.invocations, false, 'Invocações da função (cada uma recebe um lote)')}
       {m.coldStarts > 0 && item('cold starts', m.coldStarts, false, 'Invocações que esperaram uma instância nova iniciar')}
       {m.throttles > 0 && item('throttles', m.throttles, true, 'Invocações recusadas por falta de concorrência reservada')}
       {item('latência p95', `${m.latencyPercentile(95).toFixed(1)}s`)}

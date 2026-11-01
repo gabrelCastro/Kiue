@@ -44,14 +44,14 @@ test('fase 6: configurar DLQ pelo inspetor', async ({ page }) => {
   await expect(page.locator('.result-goals')).toContainText('DLQ');
   await page.getByRole('button', { name: 'Tentar de novo' }).click();
 
-  await page.getByRole('button', { name: /Fila SQS \(DLQ\)/ }).click();
+  await page.getByRole('button', { name: /^Fila \(DLQ\)/ }).click();
   await clickWorld(page, 0, 4, 0);
   await clickWorld(page, 0, 0);
   await page.getByLabel('Dead-letter queue (DLQ)').selectOption({ label: 'fila-pedidos-dlq' });
-  await expect(page.getByText('maxReceiveCount', { exact: true })).toBeVisible();
+  await expect(page.getByText('Máximo de recebimentos', { exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Na vida real' }).click();
-  await expect(page.locator('.realworld')).toContainText('aws sqs create-queue');
-  await expect(page.locator('.realworld')).toContainText('RedrivePolicy');
+  await expect(page.locator('.realworld')).toContainText('fila:');
+  await expect(page.locator('.realworld')).toContainText('maximoDeRecebimentos');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/insp-i06.png` });
   await page.getByRole('tab', { name: 'Configurar' }).click();
   await finish(page);
@@ -77,7 +77,7 @@ test('fase 5: fan-out com filter policy', async ({ page }) => {
     [4, 'Auditoria', null],
   ];
   for (const [z, consumer, type] of subs) {
-    await page.getByRole('button', { name: /Fila SQS/ }).click();
+    await page.getByRole('button', { name: /^Fila(?! \()/ }).click();
     await clickWorld(page, 3, z, 0);
     // fila → consumidor
     await page.getByRole('button', { name: '⟶ Conectar' }).click();
@@ -105,10 +105,10 @@ test('fase 5: fan-out com filter policy', async ({ page }) => {
 
 test('conexão inválida mostra explicação', async ({ page }) => {
   await openLevel(page, 'c01');
-  await page.getByRole('button', { name: /Tópico SNS/ }).click();
+  await page.getByRole('button', { name: /^Tópico/ }).click();
   await clickWorld(page, -3, 0, 0);
   await page.getByLabel('Tipo do tópico').selectOption('fifo');
-  await page.getByRole('button', { name: /Fila SQS/ }).click();
+  await page.getByRole('button', { name: /^Fila(?! \()/ }).click();
   await clickWorld(page, 3, -3, 0);
   await clickWorld(page, -3, 0, 0.8);
   await page.getByRole('button', { name: '⟶ Conectar' }).click();
@@ -116,23 +116,23 @@ test('conexão inválida mostra explicação', async ({ page }) => {
   await expect(page.locator('.toast.error')).toContainText('FIFO');
 });
 
-test('fase c06: ativar falha parcial de lote na Lambda', async ({ page }) => {
+test('fase c06: ativar falha parcial de lote na função', async ({ page }) => {
   const errors = await openLevel(page, 'c06');
   await clickWorld(page, 6, 0, 0.8);
-  await expect(page.locator('.inspector-head')).toContainText('Função Lambda');
-  await page.getByText('Report batch item failures').click();
+  await expect(page.locator('.inspector-head')).toContainText('Função sob demanda');
+  await page.getByText('Reportar falhas por item do lote', { exact: true }).click();
   await page.getByRole('tab', { name: 'Na vida real' }).click();
-  await expect(page.locator('.realworld')).toContainText('ReportBatchItemFailures');
-  await expect(page.locator('.realworld')).toContainText('batchItemFailures');
+  await expect(page.locator('.realworld')).toContainText('reportarFalhasPorItem');
+  await expect(page.locator('.realworld')).toContainText('falhas.push');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/insp-c06.png` });
   await finish(page);
   await expect(page.getByText('Fase concluída!')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
-test('fase c09: DLQ da assinatura SNS', async ({ page }) => {
+test('fase c09: DLQ da assinatura do tópico', async ({ page }) => {
   const errors = await openLevel(page, 'c09');
-  await page.getByRole('button', { name: /Fila SQS \(DLQ\)/ }).click();
+  await page.getByRole('button', { name: /^Fila \(DLQ\)/ }).click();
   await clickWorld(page, 3, 6, 0);
   await clickWorld(page, -3, 0, 0.8);
   const row = page.locator('.edge-row').filter({ hasText: '→ Parceiro (HTTPS)' });

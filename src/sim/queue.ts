@@ -150,7 +150,7 @@ export class SqsQueue {
   /** Validação síncrona do SendMessage (o que a API responderia). */
   validateSend(token: Token): SendResult {
     if (!this.config.fifo) return { ok: true };
-    if (!token.groupId) return { ok: false, reason: 'fila FIFO exige MessageGroupId' };
+    if (!token.groupId) return { ok: false, reason: 'fila FIFO exige ID de grupo' };
     if (!token.dedupId && !this.config.contentDedup)
       return {
         ok: false,

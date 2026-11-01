@@ -63,7 +63,7 @@ test('celular: aviso de girar só em pé, fase jogável por toque', async ({ pag
   // abre a gaveta, escolhe a peça: a gaveta recolhe e o toque no chão só marca o lugar
   await page.getByRole('tab', { name: 'Peças', exact: true }).tap();
   await shot(page, '03-sheet', info.project.name);
-  await page.getByRole('button', { name: /Fila SQS/ }).tap();
+  await page.getByRole('button', { name: /^Fila(?! \()/ }).tap();
   await page.waitForTimeout(400); // a gaveta recolhe e o palco reenquadra
   await expect(page.locator('.stage-hint')).toContainText('Toque no chão');
   const spot = await world(page, 0, 0, 0);
@@ -92,7 +92,7 @@ test('celular: toque longo arrasta a peça; um dedo move a câmera', async ({ pa
   test.skip(browserName !== 'chromium');
   await openFirstLevel(page);
   await page.getByRole('tab', { name: 'Peças', exact: true }).tap();
-  await page.getByRole('button', { name: /Fila SQS/ }).tap();
+  await page.getByRole('button', { name: /^Fila(?! \()/ }).tap();
   await page.waitForTimeout(400); // a gaveta recolhe e o palco reenquadra
   const spot = await world(page, 0, 0, 0);
   await page.touchscreen.tap(spot.x, spot.y);

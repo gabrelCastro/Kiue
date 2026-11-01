@@ -28,36 +28,36 @@ export function connectionError(g: Graph, fromId: string, toId: string): string 
       if (g.edges.some((e) => e.from === fromId))
         return 'Um produtor envia para um único destino. Remova a conexão atual primeiro.';
       if (to.kind === 'lambda')
-        return 'Neste jogo a Lambda é acionada por uma fila SQS (event source mapping) ou por um tópico SNS (invocação assíncrona). Coloque um dos dois entre o produtor e a função.';
+        return 'Neste jogo a função sob demanda é acionada por uma fila (o leitor da fila a chama com lotes) ou por um tópico (invocação assíncrona). Coloque um dos dois entre o produtor e a função.';
       break;
     case 'topic': {
       const topicFifo = (from as GraphNode<'topic'>).config.fifo;
       if (to.kind === 'consumer' || to.kind === 'lambda') {
-        if (topicFifo) return 'Tópico SNS FIFO só entrega para filas SQS FIFO.';
+        if (topicFifo) return 'Tópico FIFO só entrega para filas FIFO.';
         break; // assinatura HTTP/HTTPS ou Lambda (invocação assíncrona)
       }
       if (to.kind !== 'queue')
-        return 'Neste jogo o SNS entrega para filas SQS, Lambdas e endpoints HTTP. (Na AWS ele também envia e-mail e SMS.)';
-      if (topicFifo && !(to as GraphNode<'queue'>).config.fifo) return 'Tópico SNS FIFO só aceita filas SQS FIFO como assinantes.';
+        return 'Neste jogo o tópico entrega para filas, funções e endpoints HTTP. (Nos serviços reais ele também costuma enviar e-mail e SMS.)';
+      if (topicFifo && !(to as GraphNode<'queue'>).config.fifo) return 'Tópico FIFO só aceita filas FIFO como assinantes.';
       if (!topicFifo && (to as GraphNode<'queue'>).config.fifo)
-        return 'Fila FIFO só pode assinar tópico SNS FIFO. Mude o tópico para FIFO.';
+        return 'Fila FIFO só pode assinar tópico FIFO. Mude o tópico para FIFO.';
       break;
     }
     case 'queue':
       if (to.kind === 'queue')
         return 'Fila não envia para fila. Para usar uma fila como DLQ, selecione a fila de origem e escolha a "Dead-letter queue" no inspetor.';
       if (to.kind !== 'consumer' && to.kind !== 'lambda')
-        return 'O SQS não empurra mensagens: alguém precisa ler a fila. Ligue a fila a um consumidor ou a uma Lambda.';
-      if (httpOnly) return `${to.name} é um endpoint HTTP de terceiros: ele só recebe chamadas, não sabe ler filas SQS.`;
+        return 'A fila não empurra mensagens: alguém precisa ler a fila. Ligue a fila a um consumidor ou a uma função.';
+      if (httpOnly) return `${to.name} é um endpoint HTTP de terceiros: ele só recebe chamadas, não sabe ler filas.`;
       break;
     case 'consumer':
       return 'Consumidores só leem mensagens neste jogo.';
     case 'lambda':
-      return 'Neste jogo a Lambda só consome mensagens.';
+      return 'Neste jogo a função só consome mensagens.';
   }
 
   if ((to.kind === 'consumer' || to.kind === 'lambda') && g.edges.some((e) => e.to === toId))
-    return `${to.kind === 'lambda' ? 'Uma Lambda' : 'Um consumidor'} lê de uma única origem. Remova a conexão atual primeiro.`;
+    return `${to.kind === 'lambda' ? 'Uma função' : 'Um consumidor'} lê de uma única origem. Remova a conexão atual primeiro.`;
   return null;
 }
 

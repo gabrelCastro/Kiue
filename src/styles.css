@@ -1448,13 +1448,16 @@ details p {
   vertical-align: middle;
   color: #fff;
 }
-.svc-sqs {
+.svc-fila {
   background: var(--sqs);
   color: var(--on-sqs);
 }
-.svc-sns {
+.svc-topico {
   background: var(--sns);
   color: var(--on-sns);
+}
+.svc-funcao {
+  background: var(--lambda);
 }
 .svc-geral {
   background: var(--neutro-700);
@@ -2366,6 +2369,10 @@ details p {
 .menu-footer {
   margin-top: auto;
   text-align: center;
+}
+.menu-footer .trademark {
+  margin: 8px auto 0;
+  max-width: 640px;
 }
 
 @media (max-width: 1500px) {
