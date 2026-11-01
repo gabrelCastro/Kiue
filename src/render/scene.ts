@@ -45,34 +45,35 @@ import { backdropTexture, beltTexture, flowTexture, GROUND_TILE, groundTexture }
 import { bakedMaterial, bakeGeometry, bakeTree } from './bake';
 import { buildNode, DOOR_OPEN, NODE_COLORS, type NodeView } from './nodes';
 import { describeNode } from './labels';
+import { OUTCOME, RAMP, SCENE, WORKER } from '../theme';
 
 const MAX_TOKENS = 4000;
-const DIM_COLOR = new Color('#d1d5db');
-const BAR_COLOR = new Color('#3d3d3d');
+const DIM_COLOR = new Color(SCENE.dim);
+const BAR_COLOR = new Color(RAMP.neutro[800]);
 /** Barra de timeout da invocação da Lambda: folga, perto do limite, quase estourando. */
-const TIMEOUT_OK = new Color('#29ad32');
-const TIMEOUT_WARN = new Color('#f2b200');
-const TIMEOUT_BAD = new Color('#d91515');
+const TIMEOUT_OK = new Color(OUTCOME.ok);
+const TIMEOUT_WARN = new Color(OUTCOME.warn);
+const TIMEOUT_BAD = new Color(OUTCOME.bad);
 /** Cores dos pads de worker por estado (pré-calculadas: o frame não interpreta strings). */
 const PAD = {
   /** Lambda: instância iniciando (cold start). */
-  cold: new Color('#7dd3fc'),
-  down: new Color('#d91515'),
-  busy: new Color('#29ad32'),
-  polling: new Color('#0099ff'),
-  off: new Color('#e9ebed'),
-  idle: new Color('#b4b4bb'),
+  cold: new Color(WORKER.cold),
+  down: new Color(WORKER.down),
+  busy: new Color(WORKER.busy),
+  polling: new Color(WORKER.polling),
+  off: new Color(WORKER.off),
+  idle: new Color(WORKER.idle),
 };
-const DOWN_BODY = new Color('#f4a3a3');
+const DOWN_BODY = new Color(RAMP.vermelho[300]);
 const MAX_BARS = 300;
 /** Cor da névoa: o chão infinito some suavemente nela, ao longe. */
-const FOG_COLOR = '#eef0f2';
+const FOG_COLOR = SCENE.fog;
 /** Tamanho do plano do chão; ele segue a câmera, então só precisa cobrir a tela no zoom mínimo. */
 const GROUND_SIZE = 400;
 /** Raio dos canos entre as peças. */
 const PIPE_RADIUS = 0.085;
-/** Contorno de seleção: preto, como o resto da interface. */
-const SELECT_COLOR = '#111111';
+/** Contorno de seleção: a cor do texto da interface. */
+const SELECT_COLOR = SCENE.select;
 const VIEW_WIDTH = 23;
 const VIEW_HEIGHT_MIN = 13;
 /**
@@ -87,8 +88,8 @@ const CAMERA_DISTANCE = 40;
 const FIT_ZOOM_MIN = 0.8;
 const FIT_ZOOM_MAX = 1.8;
 
-const FLOW_PIPE = () => flowTexture('#d4d9de', '#9aa3ab');
-const FLOW_SNS = () => flowTexture('#ddd0ff', '#9b6bff');
+const FLOW_PIPE = () => flowTexture(RAMP.neutro[200], RAMP.neutro[400]);
+const FLOW_SNS = () => flowTexture(RAMP.ciano[200], RAMP.ciano[500]);
 
 /** Moldura de seleção: retângulo arredondado vazado, no chão, em volta da peça. */
 function frameGeometry(w: number, d: number, thickness = 0.07, radius = 0.35): ShapeGeometry {
@@ -255,7 +256,7 @@ export class SceneView {
     this.bars.setColorAt(0, new Color());
     this.scene.add(this.bars);
 
-    this.ghost = new Mesh(new CircleGeometry(0.9, 32), new MeshBasicMaterial({ color: '#29ad32', transparent: true, opacity: 0.3 }));
+    this.ghost = new Mesh(new CircleGeometry(0.9, 32), new MeshBasicMaterial({ color: OUTCOME.ok, transparent: true, opacity: 0.3 }));
     this.ghost.rotation.x = -Math.PI / 2;
     this.ghost.position.y = 0.02;
     this.ghost.visible = false;
@@ -267,7 +268,7 @@ export class SceneView {
     this.selectRing.visible = false;
     this.scene.add(this.selectRing);
 
-    this.connectLine = new Line(new BufferGeometry(), new LineDashedMaterial({ color: '#0099ff', dashSize: 0.3, gapSize: 0.2 }));
+    this.connectLine = new Line(new BufferGeometry(), new LineDashedMaterial({ color: SCENE.connect, dashSize: 0.3, gapSize: 0.2 }));
     this.connectLine.visible = false;
     this.scene.add(this.connectLine);
 
@@ -754,7 +755,7 @@ export class SceneView {
         this.selectRing.geometry = kind === 'queue' ? frameGeometry(QUEUE_LEN + 0.7, QUEUE_DEPTH + 0.7) : frameGeometry(2.4 * NODE_SCALE * 0.85, 2.4 * NODE_SCALE * 0.85);
       }
       const connecting = this.ctrl.tool.type === 'connect';
-      (this.selectRing.material as MeshBasicMaterial).color.set(connecting ? '#0099ff' : SELECT_COLOR);
+      (this.selectRing.material as MeshBasicMaterial).color.set(connecting ? SCENE.connect : SELECT_COLOR);
       (this.selectRing.material as MeshBasicMaterial).opacity = connecting ? 0.6 + 0.3 * Math.sin(t * 6) : 0.85;
     } else this.selectRing.visible = false;
 
@@ -776,7 +777,7 @@ export class SceneView {
       this.ghost.position.set(x, 0.02, z);
       if (tool.item.kind === 'queue') this.ghost.scale.set((QUEUE_LEN + 0.3) / 1.8, (QUEUE_DEPTH + 0.3) / 1.8, 1);
       else this.ghost.scale.setScalar(NODE_SCALE);
-      (this.ghost.material as MeshBasicMaterial).color.set(this.ctrl.canPlaceAt(tool.item.kind, x, z) ? '#29ad32' : '#d91515');
+      (this.ghost.material as MeshBasicMaterial).color.set(this.ctrl.canPlaceAt(tool.item.kind, x, z) ? OUTCOME.ok : OUTCOME.bad);
     } else this.ghost.visible = false;
   }
 

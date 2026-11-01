@@ -1,4 +1,5 @@
 import { CanvasTexture, ClampToEdgeWrapping, RepeatWrapping, SRGBColorSpace } from 'three';
+import { RAMP, SCENE } from '../theme';
 
 /*
  * Texturas desenhadas em canvas na primeira vez que são pedidas: nada de arquivo de imagem (o
@@ -18,9 +19,9 @@ export function contactShadowTexture(): CanvasTexture {
   if (contact) return contact;
   const [c, ctx] = canvas(128, 128);
   const g = ctx.createRadialGradient(64, 64, 4, 64, 64, 64);
-  g.addColorStop(0, 'rgba(15, 20, 26, 0.55)');
-  g.addColorStop(0.45, 'rgba(15, 20, 26, 0.28)');
-  g.addColorStop(1, 'rgba(15, 20, 26, 0)');
+  g.addColorStop(0, 'rgba(26, 25, 23, 0.55)');
+  g.addColorStop(0.45, 'rgba(26, 25, 23, 0.28)');
+  g.addColorStop(1, 'rgba(26, 25, 23, 0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 128, 128);
   contact = new CanvasTexture(c);
@@ -63,9 +64,9 @@ let belt: CanvasTexture | null = null;
 export function beltTexture(): CanvasTexture {
   if (belt) return belt;
   const [c, ctx] = canvas(64, 32);
-  ctx.fillStyle = '#3a3f46';
+  ctx.fillStyle = RAMP.neutro[800];
   ctx.fillRect(0, 0, 64, 32);
-  ctx.fillStyle = '#4b525b';
+  ctx.fillStyle = RAMP.neutro[700];
   for (let x = 0; x < 64; x += 16) ctx.fillRect(x, 0, 3, 32);
   ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
   ctx.fillRect(0, 0, 64, 4);
@@ -82,13 +83,13 @@ export function backdropTexture(): CanvasTexture {
   if (backdrop) return backdrop;
   const [c, ctx] = canvas(256, 256);
   const v = ctx.createLinearGradient(0, 0, 0, 256);
-  v.addColorStop(0, '#f7f8fa');
-  v.addColorStop(1, '#e4e7eb');
+  v.addColorStop(0, SCENE.ground[0]);
+  v.addColorStop(1, SCENE.ground[1]);
   ctx.fillStyle = v;
   ctx.fillRect(0, 0, 256, 256);
   const r = ctx.createRadialGradient(128, 118, 60, 128, 128, 190);
   r.addColorStop(0, 'rgba(255, 255, 255, 0)');
-  r.addColorStop(1, 'rgba(120, 130, 142, 0.18)');
+  r.addColorStop(1, 'rgba(128, 126, 112, 0.18)');
   ctx.fillStyle = r;
   ctx.fillRect(0, 0, 256, 256);
   backdrop = new CanvasTexture(c);
@@ -109,15 +110,15 @@ export function groundTexture(): CanvasTexture {
   const cell = 64;
   const size = cell * GROUND_TILE;
   const [c, ctx] = canvas(size, size);
-  ctx.fillStyle = '#f8f9fa';
+  ctx.fillStyle = RAMP.neutro[50];
   ctx.fillRect(0, 0, size, size);
   // as linhas ficam na borda das casas: metade de cada lado da emenda, para a repetição fechar certinho
-  ctx.fillStyle = '#e6e9ec';
+  ctx.fillStyle = RAMP.neutro[100];
   for (let i = 1; i < GROUND_TILE; i++) {
     ctx.fillRect(i * cell - 1, 0, 2, size);
     ctx.fillRect(0, i * cell - 1, size, 2);
   }
-  ctx.fillStyle = '#d9dde2';
+  ctx.fillStyle = RAMP.neutro[200];
   ctx.fillRect(0, 0, 1, size);
   ctx.fillRect(size - 1, 0, 1, size);
   ctx.fillRect(0, 0, size, 1);

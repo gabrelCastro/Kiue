@@ -1,6 +1,7 @@
 import { Color, InstancedMesh, Mesh, Object3D, type Material, type MeshBasicMaterial } from 'three';
 import { LAMBDA_BAYS, LAMBDA_DECK_H, lambdaBay } from './layout';
 import { modelGeometry, modelGeometryAt } from './models';
+import { WORKER } from '../theme';
 
 /*
  * Estação da Lambda (models/lambda.scad): 20 alçapões num anel em volta da torre. Cada instância
@@ -45,7 +46,7 @@ export class LambdaStation {
       this.dummy.rotation.set(0, 0, 0);
       this.dummy.updateMatrix();
       this.lights.setMatrixAt(j, this.dummy.matrix);
-      this.lights.setColorAt(j, new Color(j < cap ? '#b4b4bb' : '#e9ebed'));
+      this.lights.setColorAt(j, new Color(j < cap ? WORKER.idle : WORKER.off));
     });
 
     this.robots = [

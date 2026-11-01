@@ -7,6 +7,7 @@ import { Effects } from './effects';
 import { edgeCurve, queueSlot, TOKEN_H, workerSlot } from './layout';
 import { buildNode, DOOR_OPEN, type NodeView } from './nodes';
 import { backdropTexture, beltTexture, flowTexture, GROUND_TILE, groundTexture } from './textures';
+import { RAMP, SCENE, WORKER } from '../theme';
 
 /*
  * Vitrine da tela inicial: produtor → fila → consumidor com as peças do jogo, numa coreografia
@@ -30,9 +31,9 @@ const DOOR_MS = 420;
 const MAX_TOKENS = 64;
 
 const PAD = {
-  busy: new Color('#29ad32'),
-  polling: new Color('#0099ff'),
-  idle: new Color('#b4b4bb'),
+  busy: new Color(WORKER.busy),
+  polling: new Color(WORKER.polling),
+  idle: new Color(WORKER.idle),
 };
 
 type Phase = 'out' | 'queued' | 'in' | 'work' | 'done';
@@ -98,7 +99,7 @@ export function mountShowcase(container: HTMLElement, opts: ShowcaseOptions): ()
 
   const scene = new Scene();
   scene.background = backdropTexture();
-  scene.fog = new Fog('#eef0f2', 26, 60);
+  scene.fog = new Fog(SCENE.fog, 26, 60);
   const camera = new PerspectiveCamera(28, 1, 0.1, 200);
 
   const groundTex = groundTexture().clone();
@@ -120,7 +121,7 @@ export function mountShowcase(container: HTMLElement, opts: ShowcaseOptions): ()
   for (const v of Object.values(views)) scene.add(v.group);
 
   // canos
-  const pipeTex = flowTexture('#d4d9de', '#9aa3ab');
+  const pipeTex = flowTexture(RAMP.neutro[200], RAMP.neutro[400]);
   const pipe = (curve: Curve<Vector3>) => {
     const geo = new TubeGeometry(curve, 48, PIPE_RADIUS, 10, false);
     const uv = geo.getAttribute('uv');

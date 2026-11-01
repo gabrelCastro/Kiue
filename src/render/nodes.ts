@@ -21,16 +21,10 @@ import { beltTexture, contactShadowTexture } from './textures';
 import { BENCH_TOP, LAMBDA_DECK_H, LIFT, NODE_SCALE, QUEUE_DEPTH, QUEUE_HEIGHT, QUEUE_LEN, TOKEN_H, workerCell } from './layout';
 import { ArmRig } from './robots';
 import { LambdaStation } from './station';
+import { PALETTE, SCENE, SERVICE, WORKER } from '../theme';
 
-export const NODE_COLORS = {
-  // paleta dos ícones de arquitetura da AWS (mesmas cores de styles.css)
-  producer: '#545b64',
-  topic: '#8c4fff',
-  queue: '#e7157b',
-  dlq: '#d13212',
-  consumer: '#01a88d',
-  lambda: '#ed7100',
-};
+/** Cor de cada serviço (src/theme.ts; as mesmas variáveis --producer, --sns... de styles.css). */
+export const NODE_COLORS = SERVICE;
 
 let lambdaTexture: CanvasTexture | null = null;
 function lambdaGlyph(): CanvasTexture {
@@ -144,19 +138,19 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
   switch (node.kind) {
     case 'producer': {
       // doca de expedição (models/produtor.scad): o portão enrola a cada mensagem enviada
-      baseColor = '#d5dbdb';
+      baseColor = SCENE.light;
       contactShadow(model, 1.6, 1.5);
       const base = pedestal(model, 1.6, 1.5, NODE_COLORS.producer);
       body = part('produtor/corpo', mat(baseColor));
       const roof = part('produtor/telhado', mat(NODE_COLORS.producer));
-      door = part('produtor/portao', mat('#8a929b'));
+      door = part('produtor/portao', mat(SCENE.metal));
       door.position.set(DOOR_AT.x, lift + DOOR_AT.y, DOOR_AT.z);
       model.add(
         body,
         roof,
         door,
-        part('produtor/detalhe', mat('#2b3036')),
-        part('produtor/doca', mat('#b8bcc2')),
+        part('produtor/detalhe', mat(SCENE.ink)),
+        part('produtor/doca', mat(SCENE.dim)),
         part('produtor/janelas', mat('#fff1c2', { emissive: '#ffd56b' })),
         part('produtor/palete', mat('#9a7448')),
         part('produtor/caixas', mat('#c8a165')),
@@ -205,11 +199,11 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
       belt.rotation.x = -Math.PI / 2;
       belt.position.y = lift + 0.062;
       const frame = part('fila/moldura', mat(baseColor));
-      const tray = part('fila/base', mat('#2b3036'));
-      model.add(tray, belt, part('fila/rolos', mat('#8a929b')), part('fila/detalhe', mat('#414d5c')), frame, body);
+      const tray = part('fila/base', mat(SCENE.ink));
+      model.add(tray, belt, part('fila/rolos', mat(SCENE.metal)), part('fila/detalhe', mat(SCENE.dark)), frame, body);
       // FIFO: guias formam uma pista única ("uma por vez, em ordem"); DLQ: faixas de alerta
-      if (fifo) model.add(part('fila/guias', mat('#414d5c')));
-      if (isDlq) model.add(part('fila/alerta', mat('#f2b705')));
+      if (fifo) model.add(part('fila/guias', mat(SCENE.dark)));
+      if (isDlq) model.add(part('fila/alerta', mat(PALETTE.amarelo)));
       pickables.push(body, frame, tray);
       labelY = lift + QUEUE_HEIGHT + 0.45;
       break;
@@ -220,21 +214,21 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
       contactShadow(model, 1.7, 1.6);
       const base = pedestal(model, 1.7, 1.6, baseColor);
       body = part('consumidor/corpo', mat(baseColor));
-      model.add(body, part('consumidor/detalhe', mat('#2b3036')), part('consumidor/tampo', mat('#e9ebed')));
+      model.add(body, part('consumidor/detalhe', mat(SCENE.ink)), part('consumidor/tampo', mat(SCENE.white)));
       const workers = Math.max(1, (node as GraphNode<'consumer'>).config.workers);
       const cells = Array.from({ length: workers }, (_, j) => {
         const c = workerCell(j, workers);
         return { x: c.x, y: lift + BENCH_TOP, z: c.z };
       });
       // tapetes numa malha só; o anel de luz de cada worker é separado porque muda de cor
-      model.add(new Mesh(modelGeometryAt('consumidor/celula', cells), mat('#414d5c')));
+      model.add(new Mesh(modelGeometryAt('consumidor/celula', cells), mat(SCENE.dark)));
       for (const c of cells) {
-        const pad = new Mesh(modelGeometry('consumidor/luz'), mat('#b4b4bb'));
+        const pad = new Mesh(modelGeometry('consumidor/luz'), mat(WORKER.idle));
         pad.position.set(c.x, c.y, c.z);
         model.add(pad);
         workerPads.push(pad);
       }
-      arms = new ArmRig(cells, { base: mat('#ec7211'), arm: mat('#ec7211'), fore: mat('#545b64') }, TOKEN_H * 1.05 / NODE_SCALE);
+      arms = new ArmRig(cells, { base: mat(PALETTE.amarelo), arm: mat(PALETTE.amarelo), fore: mat(SCENE.dark) }, TOKEN_H * 1.05 / NODE_SCALE);
       model.add(...arms.meshes);
       pickables.push(body, base);
       labelY = 1.6;
@@ -244,21 +238,21 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
       // estação de robôs sob demanda (models/lambda.scad, render/station.ts)
       baseColor = NODE_COLORS.lambda;
       contactShadow(model, 2.0, 2.0);
-      const deck = new Mesh(modelGeometry('lambda/deck'), mat('#d5dbdb'));
+      const deck = new Mesh(modelGeometry('lambda/deck'), mat(SCENE.light));
       body = new Mesh(modelGeometry('lambda/hub'), mat(baseColor, { flatShading: true }));
       const glyph = new Mesh(new PlaneGeometry(0.66, 0.66), new MeshBasicMaterial({ map: lambdaGlyph(), transparent: true, depthWrite: false }));
       glyph.rotation.x = -Math.PI / 2;
       glyph.position.y = LAMBDA_DECK_H + 0.4 + 0.004;
       station = new LambdaStation(lambdaCap((node as GraphNode<'lambda'>).config), {
-        bay: mat('#414d5c'),
-        lock: mat('#9aa3ab'),
+        bay: mat(SCENE.dark),
+        lock: mat(SCENE.metal),
         light: bakedMaterial('#ffffff'),
-        body: mat('#f4f5f7'),
+        body: mat(SCENE.white),
         stripe: mat(baseColor),
-        detail: mat('#2b3036'),
+        detail: mat(SCENE.ink),
       });
       station.update(LAMBDA_START_CONCURRENCY, 0, 0);
-      model.add(deck, body, new Mesh(modelGeometry('lambda/hub_detalhe'), mat('#2b3036')), glyph, ...station.objects);
+      model.add(deck, body, new Mesh(modelGeometry('lambda/hub_detalhe'), mat(SCENE.ink)), glyph, ...station.objects);
       pickables.push(body, deck);
       labelY = 1.0;
       break;

@@ -1,5 +1,6 @@
 import type { InvocationRecord } from '../sim/metrics';
 import { useController, useTicker } from './hooks';
+import { OUTCOME, RAMP, WORKER } from '../theme';
 
 /** Janela da linha do tempo (ms de simulação). */
 const WINDOW = 20_000;
@@ -8,14 +9,14 @@ const GAP = 2;
 const WIDTH = 300;
 
 const COLOR: Record<InvocationRecord['outcome'] | 'running' | 'init', string> = {
-  init: '#7dd3fc',
-  running: '#86d993',
-  ok: '#29ad32',
-  partial: '#f2b200',
-  error: '#d91515',
-  timeout: '#d91515',
-  db: '#9aa3ab',
-  throttled: '#7f1d1d',
+  init: WORKER.cold,
+  running: RAMP.verde[300],
+  ok: OUTCOME.ok,
+  partial: OUTCOME.warn,
+  error: OUTCOME.bad,
+  timeout: OUTCOME.bad,
+  db: RAMP.neutro[400],
+  throttled: RAMP.vermelho[800],
 };
 
 interface Bar {
@@ -79,7 +80,7 @@ export function InvocationTimeline({ nodeId }: { nodeId: string }) {
       <svg viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" role="img" aria-label={`Linha do tempo das invocações de ${c.node.name}`}>
         {Array.from({ length: rows }, (_, j) => (
           // instâncias além da concorrência atual ficam apagadas
-          <rect key={`r${j}`} x={0} y={j * (ROW + GAP)} width={WIDTH} height={ROW} fill={j < c.active ? '#f2f2f2' : '#fafafa'} />
+          <rect key={`r${j}`} x={0} y={j * (ROW + GAP)} width={WIDTH} height={ROW} fill={j < c.active ? RAMP.neutro[100] : RAMP.neutro[50]} />
         ))}
         {bars.map((b, i) => (
           <rect key={i} x={x(b.from)} y={b.row * (ROW + GAP)} width={Math.max(1, x(b.to) - x(b.from))} height={ROW} fill={b.color}>

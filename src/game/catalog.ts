@@ -1,4 +1,5 @@
 // Vocabulário do jogo: conceitos liberáveis, tipos de mensagem e suas cores.
+import { CATEGORY, RAMP } from '../theme';
 
 export type Concept =
   | 'visibility'
@@ -54,21 +55,21 @@ export interface MessageType {
 }
 
 export const MESSAGE_TYPES: MessageType[] = [
-  { value: 'pedido', label: 'Pedido', color: '#2dd4bf' },
-  { value: 'livro', label: 'Livro', color: '#60a5fa' },
-  { value: 'eletronico', label: 'Eletrônico', color: '#f2b200' },
-  { value: 'roupa', label: 'Roupa', color: '#f87171' },
-  { value: 'comida', label: 'Comida', color: '#4ade80' },
+  { value: 'pedido', label: 'Pedido', color: CATEGORY.ciano },
+  { value: 'livro', label: 'Livro', color: CATEGORY.violeta },
+  { value: 'eletronico', label: 'Eletrônico', color: CATEGORY.amarelo },
+  { value: 'roupa', label: 'Roupa', color: CATEGORY.magenta },
+  { value: 'comida', label: 'Comida', color: CATEGORY.bordo },
 ];
 
-export const POISON_COLOR = '#3b0764';
+export const POISON_COLOR = RAMP.neutro[950];
 
 export function typeInfo(value: string): MessageType {
-  return MESSAGE_TYPES.find((t) => t.value === value) ?? { value, label: value, color: '#a1a1aa' };
+  return MESSAGE_TYPES.find((t) => t.value === value) ?? { value, label: value, color: RAMP.neutro[400] };
 }
 
-/** Cores por MessageGroupId (usadas quando a fase destaca grupos). */
-export const GROUP_COLORS = ['#f472b6', '#38bdf8', '#a3e635', '#fb923c', '#c084fc', '#facc15'];
+/** Cores por MessageGroupId (usadas quando a fase destaca grupos); separáveis com daltonismo (src/theme.ts). */
+export const GROUP_COLORS = [CATEGORY.magenta, CATEGORY.ciano, CATEGORY.verde, CATEGORY.laranja, CATEGORY.violeta, CATEGORY.amarelo];
 
 export function groupColor(groupId: string | null): string | null {
   if (!groupId) return null;
