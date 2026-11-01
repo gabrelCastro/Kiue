@@ -1,5 +1,10 @@
 pipeline {
     agent any
+    options {
+        // um build por branch de cada vez: dois deploys da master ao mesmo tempo recriavam o
+        // mesmo container e o segundo falhava com "removal of container ... is already in progress"
+        disableConcurrentBuilds()
+    }
     environment {
         DEPLOY_DIR = "/opt/kiue"
     }
@@ -21,8 +26,13 @@ pipeline {
                     sh """
                         cp \$ENV_FILE ${DEPLOY_DIR}/.env
                         cp docker-compose.yml ${DEPLOY_DIR}/docker-compose.yml
-                        KIUE_IMAGE=kiue:${env.BRANCH_NAME}-${BUILD_NUMBER} docker compose -p kiue -f ${DEPLOY_DIR}/docker-compose.yml up -d --no-build --force-recreate
                     """
+                    // se o Docker ainda estiver removendo o container anterior, espera e tenta de novo
+                    retry(3) {
+                        sh """
+                            KIUE_IMAGE=kiue:${env.BRANCH_NAME}-${BUILD_NUMBER} docker compose -p kiue -f ${DEPLOY_DIR}/docker-compose.yml up -d --no-build --force-recreate || { sleep 10; exit 1; }
+                        """
+                    }
                 }
             }
         }
