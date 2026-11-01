@@ -165,8 +165,12 @@
   /* sombras com o matiz do texto, não preto puro */
   --shadow-ink: 26, 25, 23;
   /* forma */
-  --radius: 16px;
-  --radius-sm: 8px;
+  /* cantos: quase retos, como placas de vidro cortadas; só o que é círculo por natureza fica redondo */
+  --radius-lg: 6px; /* painéis grandes: destaque, trilhas, diálogos */
+  --radius: 6px;
+  --radius-md: 4px; /* cartões */
+  --radius-sm: 3px; /* botões, campos, etiquetas */
+  --radius-xs: 2px; /* selos e pontinhos */
   --shadow: 0 1px 1px rgba(var(--shadow-ink), 0.06), 0 1px 4px rgba(var(--shadow-ink), 0.04);
   --font: system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Roboto, Arial, sans-serif;
   --mono: Monaco, Menlo, Consolas, 'Courier Prime', 'Courier New', monospace;
@@ -207,7 +211,7 @@ kbd {
   font: 11px var(--mono);
   padding: 0 5px;
   border: 1px solid var(--border-strong);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--panel);
 }
 
@@ -241,7 +245,7 @@ kbd {
   color: var(--accent);
   font-weight: 700;
   padding: 2px 14px;
-  border-radius: 20px;
+  border-radius: var(--radius-sm);
   line-height: 20px;
   cursor: pointer;
   white-space: nowrap;
@@ -315,7 +319,7 @@ h3 .linklike {
 .segmented {
   display: inline-flex;
   border: 1px solid var(--input-border);
-  border-radius: 20px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 .segmented button {
@@ -428,7 +432,7 @@ h3 .linklike {
   font-size: 12px;
   line-height: 18px;
   padding: 0 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   border: 1px solid var(--border-strong);
   color: var(--text-2);
   white-space: nowrap;
@@ -559,7 +563,7 @@ h3 .linklike {
 .kind-dot {
   width: 12px;
   height: 12px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   flex: none;
   box-shadow: inset 0 0 0 1px rgba(var(--shadow-ink), 0.18);
 }
@@ -782,7 +786,7 @@ select:focus,
   width: 30px;
   height: 18px;
   margin-top: 1px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--input-border);
   position: relative;
   transition: background 0.15s;
@@ -794,7 +798,7 @@ select:focus,
   left: 2px;
   width: 14px;
   height: 14px;
-  border-radius: 50%;
+  border-radius: var(--radius-xs);
   background: #fff;
   transition: transform 0.15s;
 }
@@ -841,7 +845,7 @@ select:focus,
   align-items: center;
   gap: 4px;
   padding: 0 8px 0 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   border: 1px solid color-mix(in srgb, var(--c) 55%, white);
   background: color-mix(in srgb, var(--c) 10%, white);
   font-size: 12px;
@@ -1081,7 +1085,7 @@ code.policy {
   line-height: 16px;
   padding: 4px 10px;
   margin-bottom: 7px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.96);
   color: var(--text);
   border: 1px solid rgba(var(--shadow-ink), 0.08);
@@ -1178,7 +1182,7 @@ code.policy {
   line-height: 14px;
   font-weight: 700;
   padding: 0 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--neutro-700);
   color: #fff;
 }
@@ -1222,7 +1226,7 @@ code.policy {
   border: 1px solid var(--sns);
   color: var(--ciano-800);
   padding: 0 7px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   pointer-events: none;
   white-space: nowrap;
 }
@@ -1439,7 +1443,7 @@ details p {
   line-height: 14px;
   font-weight: 700;
   padding: 0 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   margin-left: 4px;
   vertical-align: middle;
   color: #fff;
@@ -1658,7 +1662,7 @@ details p {
   font-weight: 700;
   padding: 2px 8px;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .password-input .reveal:focus-visible {
   outline: 2px solid var(--focus);
@@ -1674,7 +1678,7 @@ details p {
 /* alertas: borda colorida, fundo suave */
 .alert {
   border: 2px solid;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 8px 14px;
   font-size: 13px;
   line-height: 18px;
@@ -1811,7 +1815,7 @@ details p {
 .menu-hero {
   position: relative;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   background: linear-gradient(180deg, var(--neutro-50), #e6e5df);
   min-height: 400px;
@@ -1977,7 +1981,7 @@ details p {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--accent-soft);
   color: var(--text-2);
 }
@@ -2004,7 +2008,7 @@ details p {
 .track-bar {
   flex: 1;
   height: 6px;
-  border-radius: 999px;
+  border-radius: 1px;
   background: var(--accent-soft);
   overflow: hidden;
 }
@@ -2065,7 +2069,7 @@ details p {
   z-index: 1;
   width: 32px;
   height: 32px;
-  border-radius: 50%;
+  border-radius: var(--radius-md);
   display: grid;
   place-items: center;
   font-size: 13px;
@@ -2089,7 +2093,8 @@ details p {
   content: '';
   position: absolute;
   inset: -6px;
-  border-radius: 50%;
+  /* anel concêntrico: o canto cresce junto com a folga */
+  border-radius: calc(var(--radius-md) + 6px);
   border: 2px solid var(--highlight);
   opacity: 0;
   animation: trail-pulse 1.8s ease-out infinite;
@@ -2126,7 +2131,7 @@ details p {
   min-height: 56px;
   text-align: left;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--text);
@@ -2178,7 +2183,7 @@ details p {
   margin-bottom: 24px;
   padding: 12px 16px;
   border: 2px solid var(--accent);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--accent-soft);
   font-size: 14px;
   line-height: 20px;
@@ -2221,7 +2226,7 @@ details p {
   line-height: 16px;
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--accent-soft);
   color: var(--text-2);
   overflow-wrap: anywhere;
@@ -2243,7 +2248,7 @@ details p {
   font-size: 13px;
   font-weight: 800;
   padding: 6px 14px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--accent);
   color: #ffffff;
   white-space: nowrap;
@@ -2753,7 +2758,7 @@ html.pinned-viewport body {
   height: auto;
   min-height: 40px;
   max-height: 200px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .timeline-axis {
   display: flex;
@@ -2858,7 +2863,7 @@ html.pinned-viewport body {
 
 /* destaque: a cena 3D flutua no vidro, com as bordas se dissolvendo nele */
 .menu-hero {
-  border-radius: 24px;
+  border-radius: var(--radius-lg);
   background-color: rgba(255, 255, 255, 0.6);
 }
 .menu-hero .hero-stage {
@@ -2884,7 +2889,7 @@ html.pinned-viewport body {
 
 /* trilhas: vidro; os cartões das fases ficam quase opacos, porque têm texto pequeno */
 .menu .track {
-  border-radius: 24px;
+  border-radius: var(--radius-lg);
 }
 .menu .level-card {
   background: var(--glass-solid);
@@ -2944,7 +2949,7 @@ html.pinned-viewport body {
 }
 
 .guest-banner {
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background-color: rgba(255, 255, 255, 0.62);
   border-left: 4px solid var(--accent);
 }
