@@ -303,7 +303,7 @@ function Track({ track, title, subtitle, levels, next }: { track: string; title:
                   ) : state === 'done' ? (
                     <Stars n={p!.stars} />
                   ) : state === 'next' ? (
-                    <span class="lc-play">Jogar ▸</span>
+                    <span class="lc-play">Jogar →</span>
                   ) : needsAccount ? (
                     a.status === 'loading' ? null : <span class="lock-tag">Requer conta</span>
                   ) : lock ? (

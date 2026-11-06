@@ -130,6 +130,8 @@
   --highlight-text: var(--magenta-700);
   --highlight-soft: var(--magenta-50);
   --focus: var(--ciano-600);
+  /* contorno e sombra dos botões "bloco" */
+  --btn-ink: var(--neutro-950);
   --star: var(--amarelo);
   --star-edge: var(--amarelo-600);
   --ok: var(--verde-700);
@@ -237,62 +239,80 @@ kbd {
   flex-wrap: wrap;
 }
 
-/* ───────── botões (pílula) ───────── */
+/* ───────── botões: "bloco" ─────────
+ * Contorno preto e sombra sólida deslocada, como peça de tabuleiro; ao clicar, o botão encaixa no
+ * lugar da sombra. Principal em ciano, secundário branco (amarelo no hover). Fantasmas (barra, ícones)
+ * ficam sem caixa. O deslocamento sai de --btn-shift, que os tamanhos menores reduzem.
+ */
 
 .btn {
-  border: 2px solid var(--accent);
+  --btn-shift: 3px;
+  border: 2px solid var(--btn-ink);
   background: var(--panel);
-  color: var(--accent);
-  font-weight: 700;
-  padding: 2px 14px;
-  border-radius: var(--radius-sm);
+  color: var(--btn-ink);
+  font-weight: 800;
+  padding: 3px 14px;
+  border-radius: var(--radius-xs);
   line-height: 20px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  box-shadow: var(--btn-shift) var(--btn-shift) 0 var(--btn-ink);
+  transition: background-color 0.12s, color 0.12s, box-shadow 0.08s, transform 0.08s;
 }
 .btn:hover:not(:disabled) {
-  border-color: var(--accent-hover);
-  color: var(--accent-hover);
-  background: var(--accent-soft);
+  background: var(--amarelo);
+  transform: translate(-1px, -1px);
+  box-shadow: calc(var(--btn-shift) + 1px) calc(var(--btn-shift) + 1px) 0 var(--btn-ink);
+}
+.btn:active:not(:disabled) {
+  transform: translate(var(--btn-shift), var(--btn-shift));
+  box-shadow: 0 0 0 var(--btn-ink);
 }
 .btn:disabled {
   border-color: var(--border-strong);
-  color: var(--border-strong);
+  color: var(--neutro-500);
+  box-shadow: none;
   cursor: not-allowed;
 }
 .btn.ghost {
   border-color: transparent;
   background: transparent;
+  box-shadow: none;
+  font-weight: 700;
 }
 .btn.ghost:hover:not(:disabled) {
   border-color: transparent;
+  background: var(--accent-soft);
+  transform: none;
+  box-shadow: none;
+}
+.btn.ghost:active:not(:disabled) {
+  transform: none;
 }
 .btn.primary,
 .btn.run {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--on-primary);
+  background: var(--ciano);
+  color: var(--btn-ink);
 }
 .btn.primary:hover:not(:disabled),
 .btn.run:hover:not(:disabled) {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
-  color: var(--on-primary);
+  background: #4cc9de;
+}
+.btn.primary:disabled,
+.btn.run:disabled {
+  background: var(--neutro-100);
 }
 .btn.danger {
-  border-color: var(--bad);
   color: var(--bad);
 }
 .btn.danger:hover:not(:disabled) {
-  border-color: var(--bad);
-  color: var(--bad);
   background: var(--bad-soft);
 }
 .btn.tiny {
+  --btn-shift: 2px;
   padding: 0 10px;
   font-size: 12px;
-  border-width: 1px;
+  border-width: 1.5px;
 }
 .btn:focus-visible,
 .palette-item:focus-visible,
@@ -377,36 +397,22 @@ h3 .linklike {
   text-overflow: ellipsis;
   min-width: 0;
 }
+/* barra da fase: os botões de texto (fantasma) ficam leves; os de ação são blocos menores */
 .topbar .btn {
-  border-color: var(--nav-border);
-  background: transparent;
-  color: var(--nav-text);
-  border-width: 1px;
-  font-weight: 400;
-  padding: 3px 12px;
+  --btn-shift: 2px;
+  padding: 2px 12px;
+  font-weight: 700;
 }
-.topbar .btn:hover:not(:disabled) {
-  border-color: var(--nav-text);
+.topbar .btn.ghost {
+  font-weight: 400;
+  color: var(--nav-text);
+}
+.topbar .btn.ghost:hover:not(:disabled) {
   background: var(--nav-hover);
   color: var(--accent-hover);
 }
-.topbar .btn.ghost {
-  border-color: transparent;
-}
-.topbar .btn:disabled {
+.topbar .btn.ghost:disabled {
   color: var(--border-strong);
-  border-color: transparent;
-}
-.topbar .btn.run {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--on-primary);
-  font-weight: 700;
-}
-.topbar .btn.run:hover:not(:disabled) {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
-  color: var(--on-primary);
 }
 .topbar .segmented {
   border-color: var(--nav-border);
@@ -1794,11 +1800,15 @@ details p {
   color: var(--nav-text);
   font-weight: 400;
   padding: 3px 12px;
+  box-shadow: none;
 }
-.console-nav .btn:hover:not(:disabled) {
+.console-nav .btn:hover:not(:disabled),
+.console-nav .btn:active:not(:disabled) {
   border-color: transparent;
   background: var(--nav-hover);
   color: var(--accent-hover);
+  transform: none;
+  box-shadow: none;
 }
 .console-nav .star-count {
   color: var(--nav-text);
@@ -2250,11 +2260,23 @@ details p {
 .lc-play {
   font-size: 13px;
   font-weight: 800;
-  padding: 6px 14px;
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: #ffffff;
+  padding: 4px 12px;
+  border-radius: var(--radius-xs);
+  border: 2px solid var(--btn-ink);
+  background: var(--ciano);
+  color: var(--btn-ink);
+  box-shadow: 3px 3px 0 var(--btn-ink);
   white-space: nowrap;
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+/* o cartão inteiro é o botão: o "Jogar" responde ao hover e ao clique dele */
+.level-card:hover:not(:disabled) .lc-play {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--btn-ink);
+}
+.level-card:active:not(:disabled) .lc-play {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--btn-ink);
 }
 .lc-hint {
   font-size: 12px;
@@ -2488,7 +2510,6 @@ body {
   min-height: 44px;
   z-index: 4;
   background: var(--panel);
-  box-shadow: var(--shadow);
 }
 
 .rotate-hint {
@@ -2962,11 +2983,14 @@ html.pinned-viewport body {
 }
 
 /* botões secundários da home: vidro leve (sem desfoque próprio; já estão sobre vidro) */
-.menu .btn:not(.primary):not(.linklike) {
-  background: rgba(255, 255, 255, 0.6);
+.hero-actions .btn,
+.continue-card .btn {
+  --btn-shift: 4px;
+  padding: 8px 18px;
+  font-size: 15px;
 }
-.menu .btn:not(.primary):not(.linklike):hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.92);
+.hero-actions {
+  gap: 14px;
 }
 
 .menu .sandbox-card {
