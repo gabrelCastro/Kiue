@@ -74,16 +74,7 @@ export function Menu() {
         </div>
         <SavedSandboxes />
         <footer class="menu-footer muted small">
-          Simulação didática: tempos e limites são reduzidos para caber num jogo, mas as regras seguem o comportamento de serviços de fila reais.{' '}
-          <button
-            class="linklike"
-            onClick={() => {
-              const where = auth.status === 'signed-in' ? 'da sua conta' : 'salvo neste navegador';
-              if (confirm(`Apagar todo o progresso ${where}? Os sandboxes salvos continuam.`)) ctrl.resetProgress();
-            }}
-          >
-            Apagar progresso
-          </button>
+          Simulação didática: tempos e limites são reduzidos para caber num jogo, mas as regras seguem o comportamento de serviços de fila reais.
           <p class="trademark">
             Projeto educacional independente, sem afiliação com a Amazon Web Services. Fila, tópico e função sob demanda correspondem aos conceitos de serviços como
             Amazon SQS, Amazon SNS e AWS Lambda, marcas dos respectivos donos.
