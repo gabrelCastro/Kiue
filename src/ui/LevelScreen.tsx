@@ -139,8 +139,8 @@ function TopBar() {
             Ver solução
           </button>
         )}
-        <button class="btn ghost" onClick={() => ctrl.setGlossary(true)}>
-          Glossário
+        <button class="btn ghost" onClick={() => ctrl.study.openPanel(ctrl.level?.id ?? null)}>
+          Estudar
         </button>
         <AccountButton />
       </div>
@@ -605,8 +605,8 @@ function CompactTopBar() {
                 Ver solução
               </button>
             )}
-            <button class="btn ghost" onClick={close(() => ctrl.setGlossary(true))}>
-              Glossário
+            <button class="btn ghost" onClick={close(() => ctrl.study.openPanel(ctrl.level?.id ?? null))}>
+              Estudar
             </button>
             <div class="more-account" onClick={() => setMenu(false)}>
               <AccountButton />

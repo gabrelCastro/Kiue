@@ -15,6 +15,13 @@ npm run dev        # jogo em http://localhost:5173 + API de contas em :8787
 
 **Sandbox**: tudo liberado, inclusive o produtor.
 
+**Estudos**: a teoria por trás das fases.
+- **Apostila** em 13 capítulos, com índice, progresso de leitura salvo na conta e termos do glossário explicados ao passar o mouse.
+- **Glossário** com busca.
+- **Revisão**: as perguntas dos quizzes das fases já concluídas, embaralhadas.
+
+Cada capítulo aponta as fases que treinam o assunto, e na fase o botão **Estudar** abre o capítulo certo por cima da cena, sem perder a montagem. Visitantes leem os capítulos 1 e 2; os demais seguem a mesma regra das fases: ficam em `content/study.ts`, só no servidor (`GET /api/study/:id`), e o `check-bundle` garante que não vazam para o bundle.
+
 Cada fase tem briefing, dica, objetivos medidos ao vivo, 3 estrelas (objetivos, latência p95 e chamadas de API), resumo do que foi aprendido, quiz e o painel **Na vida real**, com a configuração (num YAML genérico) e o código equivalentes a cada peça, sem amarrar a um provedor.
 
 ## Como jogar
@@ -29,12 +36,13 @@ Cada fase tem briefing, dica, objetivos medidos ao vivo, 3 estrelas (objetivos, 
 ```
 src/sim     motor de simulação determinístico (TS puro, sem three.js)
 src/game    fases, objetivos, validação do grafo, controller, save, glossário, "na vida real"
+src/study   apostila: catálogo de capítulos, capítulos abertos e o estado da sessão de estudos
 src/render  cena three.js: peças, conexões, mensagens (InstancedMesh), efeitos
 models/     produtor, fila e consumidor modelados em OpenSCAD (ver "Modelos 3D")
 src/ui      interface Preact
 src/auth    estado de login no navegador (AuthStore); src/api: cliente HTTP
-src/account sincronização do progresso e sandboxes salvos com a conta
-content/    conteúdo das fases fechadas para visitantes (só o servidor importa)
+src/account sincronização do progresso, dos capítulos lidos e dos sandboxes salvos com a conta
+content/    fases e capítulos da apostila fechados para visitantes (só o servidor importa)
 server/     API (Hono + SQLite): contas, fases, progresso, sandboxes; testes em server/tests
 tests/      testes do simulador, do controller e de todas as fases
 e2e/        testes Playwright que jogam pela interface

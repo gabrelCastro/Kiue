@@ -80,6 +80,13 @@ export interface ProgressRepo {
   clear(userId: string): void;
 }
 
+/** Capítulos da apostila lidos por conta. */
+export interface StudyRepo {
+  list(userId: string): string[];
+  /** Acrescenta os capítulos (os que já estavam continuam como estavam). */
+  add(userId: string, chapterIds: string[], now: number): void;
+}
+
 export interface SandboxSummary {
   id: string;
   name: string;
@@ -269,6 +276,20 @@ export class SqliteProgressRepo implements ProgressRepo {
 
   clear(userId: string): void {
     this.db.prepare('DELETE FROM progress WHERE user_id = ?').run(userId);
+  }
+}
+
+export class SqliteStudyRepo implements StudyRepo {
+  constructor(private db: Database) {}
+
+  list(userId: string): string[] {
+    const rows = this.db.prepare('SELECT chapter_id FROM study_reads WHERE user_id = ? ORDER BY chapter_id').all(userId) as unknown as { chapter_id: string }[];
+    return rows.map((r) => r.chapter_id);
+  }
+
+  add(userId: string, chapterIds: string[], now: number): void {
+    const stmt = this.db.prepare('INSERT INTO study_reads (user_id, chapter_id, read_at) VALUES (?, ?, ?) ON CONFLICT (user_id, chapter_id) DO NOTHING');
+    for (const id of chapterIds) stmt.run(userId, id, now);
   }
 }
 

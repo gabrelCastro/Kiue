@@ -10,6 +10,9 @@ import { join } from 'node:path';
 import { CONTENT_LEVELS } from '../content/levels';
 import { FREE_LEVELS } from '../src/game/levels';
 import type { Level } from '../src/game/level-types';
+import { CONTENT_CHAPTERS } from '../content/study';
+import { FREE_CHAPTERS } from '../src/study/free';
+import type { Block, Chapter } from '../src/study/types';
 
 const DIST = 'dist';
 
@@ -26,6 +29,14 @@ function needles(level: Level): string[] {
   return texts.map((t) => t.split(/["'`\\\n]/).sort((a, b) => b.length - a.length)[0].slice(0, 60)).filter((t) => t.length >= 20);
 }
 
+/** Os mesmos trechos para os capítulos da apostila (parágrafos, listas e destaques). */
+function chapterNeedles(chapter: Chapter): string[] {
+  const texts = chapter.blocks.flatMap((b: Block) => (b.t === 'p' || b.t === 'note' ? [b.text] : b.t === 'list' ? b.items : []));
+  return texts
+    .map((t) => t.split(/\*\*|\{\{|\}\}|["'`\\\n|]/).sort((a, b) => b.length - a.length)[0].slice(0, 60))
+    .filter((t) => t.length >= 30);
+}
+
 const bundle = files(DIST)
   .filter((f) => /\.(js|html|css|json|map)$/.test(f))
   .map((f) => ({ file: f, text: readFileSync(f, 'utf8') }));
@@ -38,7 +49,16 @@ for (const level of CONTENT_LEVELS) {
   }
 }
 
+for (const chapter of CONTENT_CHAPTERS) {
+  for (const needle of chapterNeedles(chapter)) {
+    const hit = bundle.find((b) => b.text.includes(needle));
+    if (hit) leaks.push(`${chapter.id}: "${needle}" em ${hit.file}`);
+  }
+}
+
 const missing = FREE_LEVELS.flatMap((level) => needles(level).filter((n) => !bundle.some((b) => b.text.includes(n))).map((n) => `${level.id}: "${n}"`));
+
+missing.push(...FREE_CHAPTERS.flatMap((ch) => chapterNeedles(ch).filter((n) => !bundle.some((b) => b.text.includes(n))).map((n) => `${ch.id}: "${n}"`)));
 
 if (missing.length) {
   console.error('check-bundle: a busca não achou nem as fases abertas; a verificação não é confiável:\n' + missing.join('\n'));
@@ -48,4 +68,4 @@ if (leaks.length) {
   console.error('check-bundle: conteúdo de fases fechadas apareceu no bundle:\n' + leaks.join('\n'));
   process.exit(1);
 }
-console.log(`check-bundle: ok (${CONTENT_LEVELS.length} fases fechadas fora do bundle, ${FREE_LEVELS.length} abertas dentro)`);
+console.log(`check-bundle: ok (${CONTENT_LEVELS.length} fases e ${CONTENT_CHAPTERS.length} capítulos fechados fora do bundle; ${FREE_LEVELS.length} fases e ${FREE_CHAPTERS.length} capítulos abertos dentro)`);

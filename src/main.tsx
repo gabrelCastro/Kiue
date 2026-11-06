@@ -1,9 +1,11 @@
 import { render } from 'preact';
 import { ProgressSync } from './account/progress-sync';
+import { StudySync } from './account/study-sync';
 import { sandboxes } from './account/sandboxes';
 import { api, ApiError } from './api/http';
 import { auth } from './auth/store';
 import type { Level } from './game/level-types';
+import type { Chapter } from './study/types';
 import { Controller } from './game/controller';
 import { App } from './ui/App';
 import { ControllerContext } from './ui/hooks';
@@ -36,6 +38,7 @@ if (authError) {
 const syncAccess = () => ctrl.setAccess(auth.status === 'signed-in' ? 'member' : 'guest');
 auth.subscribe(syncAccess);
 new ProgressSync(ctrl, auth);
+new StudySync(ctrl.study, auth);
 auth.subscribe(() => auth.status !== 'signed-in' && sandboxes.list && sandboxes.reset());
 ctrl.onAccountRequired = (level) => {
   if (auth.status === 'loading') return; // ainda não sabemos se há sessão; o clique seguinte resolve
@@ -49,6 +52,18 @@ ctrl.fetchLevel = async (id) => {
     if (e instanceof ApiError && e.code === 'unauthenticated') {
       void auth.init(); // a sessão caiu: volta a visitante e o menu mostra o cadeado
       throw new Error('Sua sessão terminou. Entre de novo para jogar esta fase.');
+    }
+    throw e;
+  }
+};
+// capítulos fechados da apostila: mesma regra das fases
+ctrl.study.fetchChapter = async (id) => {
+  try {
+    return (await api<{ chapter: Chapter }>('GET', `/study/${encodeURIComponent(id)}`)).chapter;
+  } catch (e) {
+    if (e instanceof ApiError && e.code === 'unauthenticated') {
+      void auth.init();
+      throw new Error('Sua sessão terminou. Entre de novo para ler este capítulo.');
     }
     throw e;
   }

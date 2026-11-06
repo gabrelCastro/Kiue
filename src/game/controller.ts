@@ -11,6 +11,7 @@ import { CATALOG, metaById, nextMeta, type LevelMeta } from './level-catalog';
 import { FREE_LEVELS, sandbox } from './levels';
 import { createSimulation, solutionGraph } from './run';
 import { loadProgress, localProgress, type LevelProgress, type Progress, type ProgressSink } from './save';
+import { StudyState, type StudyTab } from '../study/state';
 
 export type Mode = 'build' | 'run' | 'done';
 export type Tool = { type: 'select' } | { type: 'place'; item: PaletteItem } | { type: 'connect'; from: string };
@@ -49,7 +50,7 @@ const DEFAULTS: { [K in NodeKind]: () => ConfigByKind[K] } = {
 
 /** Estado global do jogo. A UI assina mudanças; o renderer lê a cada frame. */
 export class Controller {
-  screen: 'menu' | 'level' = 'menu';
+  screen: 'menu' | 'level' | 'study' = 'menu';
   level: Level | null = null;
   graph: Graph = { nodes: [], edges: [] };
   /** Incrementa a cada mudança estrutural do grafo (o renderer reconstrói a cena). */
@@ -71,7 +72,6 @@ export class Controller {
   usedSolution = false;
   toast: Toast | null = null;
   showBriefing = false;
-  showGlossary = false;
   progress: Progress = loadProgress();
   progressSink: ProgressSink = localProgress;
   /** Sandbox salvo aberto (null = sandbox novo, ainda não salvo). */
@@ -91,6 +91,12 @@ export class Controller {
   /** Buscas em andamento: pré-carga e clique na mesma fase compartilham a requisição. */
   private fetching = new Map<string, Promise<Level>>();
   private loadSeq = 0;
+
+  /** Sessão de estudos: apostila, glossário, revisão e o painel "Estudar" dentro da fase. */
+  readonly study = new StudyState(
+    () => this.notify(),
+    () => this.access,
+  );
 
   constructor(opts: { levels?: Level[] } = {}) {
     for (const l of opts.levels ?? []) this.registerLevel(l);
@@ -150,7 +156,37 @@ export class Controller {
     this.level = null;
     this.setSim(null);
     this.live = false;
+    this.study.closePanel();
     this.notify();
+  }
+
+  /** Abre a sessão de estudos (sai da fase, se estiver numa). */
+  openStudy(tab: StudyTab = 'apostila', chapterId?: string): void {
+    this.screen = 'study';
+    this.level = null;
+    this.setSim(null);
+    this.live = false;
+    this.study.closePanel();
+    if (chapterId) this.study.select(chapterId);
+    this.study.tab = tab;
+    void this.study.ensure(this.study.chapterId);
+    this.notify();
+  }
+
+  /**
+   * Garante o conteúdo de uma fase sem abri-la (a revisão usa os quizzes). Null se pede conta ou
+   * se a busca falhou.
+   */
+  async ensureLevel(id: string): Promise<Level | null> {
+    const meta = metaById(id);
+    if (!meta || requiresAccount(meta, this.access)) return null;
+    const have = this.levels.get(id);
+    if (have) return have;
+    try {
+      return await this.load(id);
+    } catch {
+      return null;
+    }
   }
 
   lockReason(level: LevelMeta): LockReason | null {
@@ -174,6 +210,7 @@ export class Controller {
     if (access === 'guest') {
       for (const id of this.levels.keys()) if (id !== 'sandbox' && !GUEST_LEVELS.has(id)) this.levels.delete(id);
       this.fetching.clear();
+      this.study.dropLocked();
     }
     const level = this.level;
     if (this.screen === 'level' && level) {
@@ -295,11 +332,6 @@ export class Controller {
 
   setBriefing(open: boolean): void {
     this.showBriefing = open;
-    this.notify();
-  }
-
-  setGlossary(open: boolean): void {
-    this.showGlossary = open;
     this.notify();
   }
 

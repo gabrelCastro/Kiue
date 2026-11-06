@@ -74,6 +74,15 @@ const MIGRATIONS: string[] = [
   ) WITHOUT ROWID;
   CREATE INDEX identities_user ON identities(user_id);
   `,
+  `
+  -- capítulos da apostila marcados como lidos; só cresce (união), como o progresso das fases
+  CREATE TABLE study_reads (
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    chapter_id TEXT NOT NULL,
+    read_at    INTEGER NOT NULL,
+    PRIMARY KEY (user_id, chapter_id)
+  ) WITHOUT ROWID;
+  `,
 ];
 
 export type Database = DatabaseSync;

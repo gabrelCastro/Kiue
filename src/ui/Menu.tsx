@@ -7,6 +7,8 @@ import { useAuth } from './auth/AuthDialog';
 import { useController } from './hooks';
 import { SavedSandboxes } from './SavedSandboxes';
 import { Stars } from './Result';
+import { StudyCard } from './Study';
+import { CheckIcon, LockIcon } from './icons';
 
 export function Menu() {
   const ctrl = useController();
@@ -29,8 +31,8 @@ export function Menu() {
         <span class="star-count" title="Estrelas conquistadas">
           ★ {totalStars} / {CATALOG.length * 3}
         </span>
-        <button class="btn" onClick={() => ctrl.setGlossary(true)}>
-          Glossário
+        <button class="btn" onClick={() => ctrl.openStudy()}>
+          Estudos
         </button>
         <button class="btn" onClick={() => ctrl.startLevel('sandbox')}>
           Sandbox
@@ -72,6 +74,7 @@ export function Menu() {
             next={next?.level.id}
           />
         </div>
+        <StudyCard />
         <SavedSandboxes />
         <footer class="menu-footer muted small">
           Simulação didática: tempos e limites são reduzidos para caber num jogo, mas as regras seguem o comportamento de serviços de fila reais.
@@ -171,23 +174,6 @@ function ContinueCard({ next }: { next: ReturnType<typeof nextLevel> }) {
         {lock === 'account' ? 'Criar conta para continuar' : 'Continuar'}
       </button>
     </section>
-  );
-}
-
-function LockIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor" />
-      <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.6" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
   );
 }
 

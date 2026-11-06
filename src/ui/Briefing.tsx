@@ -1,4 +1,5 @@
 import { useController } from './hooks';
+import { StudyLink } from './Result';
 
 export function Briefing() {
   const ctrl = useController();
@@ -18,7 +19,8 @@ export function Briefing() {
           <summary>Dica</summary>
           <p>{level.hint}</p>
         </details>
-        <div class="row end">
+        <div class="row between gap">
+          <StudyLink />
           <button class="btn primary" onClick={() => ctrl.setBriefing(false)} autoFocus>
             Começar
           </button>

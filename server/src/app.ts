@@ -12,8 +12,9 @@ import type { Database } from './db';
 import { LevelContent } from './game/levels';
 import { ProgressService } from './game/progress';
 import { SANDBOX_LIMITS, SandboxService } from './game/sandboxes';
+import { StudyContent, StudyService } from './game/study';
 import type { Mailer } from './mail';
-import { SqliteIdentityRepo, SqliteProgressRepo, SqliteResetRepo, SqliteSandboxRepo, SqliteSessionRepo, SqliteUserRepo } from './repos';
+import { SqliteIdentityRepo, SqliteProgressRepo, SqliteResetRepo, SqliteSandboxRepo, SqliteSessionRepo, SqliteStudyRepo, SqliteUserRepo } from './repos';
 
 const MINUTE = 60_000;
 
@@ -64,6 +65,8 @@ export function createApp(deps: AppDeps) {
   const progress = new ProgressService(new SqliteProgressRepo(deps.db), now);
   const sandboxes = new SandboxService(new SqliteSandboxRepo(deps.db), now);
   const levels = new LevelContent();
+  const chapters = new StudyContent();
+  const study = new StudyService(new SqliteStudyRepo(deps.db), now);
   const google: GoogleClient | null =
     deps.google !== undefined
       ? deps.google
@@ -271,6 +274,18 @@ export function createApp(deps: AppDeps) {
   app.delete('/progress', (c) => {
     progress.clear(write(c).user.id);
     return c.body(null, 204);
+  });
+
+  // apostila: capítulos fechados (como as fases) e os capítulos lidos da conta
+  app.get('/study/:id', (c) => {
+    requireSession(c);
+    return c.body(chapters.body(c.req.param('id')), 200, { 'content-type': 'application/json; charset=utf-8' });
+  });
+  app.get('/study-progress', (c) => c.json({ read: study.get(requireSession(c).user.id) }));
+  // união: acrescenta os capítulos enviados e devolve todos os lidos
+  app.patch('/study-progress', async (c) => {
+    const s = write(c);
+    return c.json({ read: study.add(s.user.id, await body(c)) });
   });
 
   app.get('/sandboxes', (c) => c.json({ sandboxes: sandboxes.list(requireSession(c).user.id), limit: SANDBOX_LIMITS.perUser }));

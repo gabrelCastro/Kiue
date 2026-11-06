@@ -1,8 +1,9 @@
 import { useState } from 'preact/hooks';
 import { auth } from '../auth/store';
 import { nextMeta } from '../game/level-catalog';
-import type { QuizQuestion } from '../game/level-types';
+import { chapterForLevel } from '../study/catalog';
 import { useController } from './hooks';
+import { Quiz } from './Quiz';
 
 export function Stars({ n, total = 3 }: { n: number; total?: number }) {
   return (
@@ -79,9 +80,27 @@ export function ResultModal() {
               )}
               {result.passed && level.quiz.length === 0 && <NextButton nextId={nextId} />}
             </div>
+            <div class="row end">
+              <StudyLink />
+            </div>
           </>
         ) : (
-          <Quiz questions={level.quiz} onDone={(correct) => ctrl.recordQuiz(correct)} nextId={nextId} />
+          <Quiz
+            questions={level.quiz}
+            onDone={(correct) => ctrl.recordQuiz(correct)}
+            end={(correct, total) => (
+              <>
+                <h2>Quiz concluído</h2>
+                <p>
+                  Você acertou <b>{correct}</b> de <b>{total}</b>.
+                </p>
+                <div class="row end gap">
+                  <StudyLink />
+                  <NextButton nextId={nextId} />
+                </div>
+              </>
+            )}
+          />
         )}
       </div>
     </div>
@@ -109,73 +128,14 @@ function NextButton({ nextId }: { nextId: string | null }) {
   );
 }
 
-function Quiz({ questions, onDone, nextId }: { questions: QuizQuestion[]; onDone: (correct: number) => void; nextId: string | null }) {
-  const [idx, setIdx] = useState(0);
-  const [picked, setPicked] = useState<number | null>(null);
-  const [correct, setCorrect] = useState(0);
-  const [finished, setFinished] = useState(false);
-  const q = questions[idx];
-
-  if (finished) {
-    return (
-      <>
-        <h2>Quiz concluído</h2>
-        <p>
-          Você acertou <b>{correct}</b> de <b>{questions.length}</b>.
-        </p>
-        <div class="row end">
-          <NextButton nextId={nextId} />
-        </div>
-      </>
-    );
-  }
-
-  const choose = (i: number) => {
-    if (picked !== null) return;
-    setPicked(i);
-    if (i === q.answer) setCorrect((c) => c + 1);
-  };
-
-  const advance = () => {
-    if (idx + 1 < questions.length) {
-      setIdx(idx + 1);
-      setPicked(null);
-    } else {
-      onDone(correct);
-      setFinished(true);
-    }
-  };
-
+/** Abre, por cima da fase, o capítulo da apostila sobre o assunto dela. */
+export function StudyLink() {
+  const ctrl = useController();
+  const chapter = ctrl.level ? chapterForLevel(ctrl.level.id) : undefined;
+  if (!chapter) return null;
   return (
-    <>
-      <div class="modal-kicker">
-        Pergunta {idx + 1} de {questions.length}
-      </div>
-      <h2>{q.question}</h2>
-      <div class="quiz-options">
-        {q.options.map((o, i) => {
-          let cls = '';
-          if (picked !== null) cls = i === q.answer ? 'right' : i === picked ? 'wrong' : 'dim';
-          return (
-            <button class={`quiz-option ${cls}`} onClick={() => choose(i)} disabled={picked !== null && cls === 'dim'}>
-              {o}
-            </button>
-          );
-        })}
-      </div>
-      {picked !== null && (
-        <>
-          <p class={`quiz-explain ${picked === q.answer ? 'right' : 'wrong'}`}>
-            {picked === q.answer ? '✔ Isso mesmo. ' : '✘ Não exatamente. '}
-            {q.explanation}
-          </p>
-          <div class="row end">
-            <button class="btn primary" onClick={advance} autoFocus>
-              {idx + 1 < questions.length ? 'Próxima pergunta' : 'Ver resultado'}
-            </button>
-          </div>
-        </>
-      )}
-    </>
+    <button class="linklike study-link" onClick={() => ctrl.study.openPanel(ctrl.level!.id)}>
+      Estudar: {chapter.title}
+    </button>
   );
 }
