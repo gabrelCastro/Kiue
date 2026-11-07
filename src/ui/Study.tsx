@@ -8,6 +8,7 @@ import { CHAPTERS, chapterForLevel, chapterForTerm, chapterMeta, nextChapter } f
 import type { Block, ChapterMeta } from '../study/types';
 import { AccountButton } from './auth/AccountButton';
 import { useController } from './hooks';
+import { ThemeButton } from './ThemeButton';
 import { CheckIcon, LockIcon } from './icons';
 import { Quiz } from './Quiz';
 
@@ -43,6 +44,7 @@ export function StudyScreen() {
         <button class="btn" onClick={() => ctrl.startLevel('sandbox')}>
           Sandbox
         </button>
+        <ThemeButton />
         <AccountButton />
       </nav>
       <div class="study">

@@ -1,5 +1,5 @@
 import { CanvasTexture, ClampToEdgeWrapping, RepeatWrapping, SRGBColorSpace } from 'three';
-import { RAMP, SCENE } from '../theme';
+import { SCENE, themeMode, type ThemeMode } from '../theme';
 
 /*
  * Texturas desenhadas em canvas na primeira vez que são pedidas: nada de arquivo de imagem (o
@@ -60,13 +60,15 @@ export function flowTexture(base: string, stripe: string): CanvasTexture {
 }
 
 let belt: CanvasTexture | null = null;
+let beltMode: ThemeMode | null = null;
 /** Esteira da fila: borracha escura com ripas claras, rolando na direção da cabeça da fila. */
 export function beltTexture(): CanvasTexture {
-  if (belt) return belt;
+  if (belt && beltMode === themeMode()) return belt;
+  beltMode = themeMode();
   const [c, ctx] = canvas(64, 32);
-  ctx.fillStyle = RAMP.neutro[800];
+  ctx.fillStyle = SCENE.belt[0];
   ctx.fillRect(0, 0, 64, 32);
-  ctx.fillStyle = RAMP.neutro[700];
+  ctx.fillStyle = SCENE.belt[1];
   for (let x = 0; x < 64; x += 16) ctx.fillRect(x, 0, 3, 32);
   ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
   ctx.fillRect(0, 0, 64, 4);
@@ -78,9 +80,11 @@ export function beltTexture(): CanvasTexture {
 }
 
 let backdrop: CanvasTexture | null = null;
+let backdropMode: ThemeMode | null = null;
 /** Fundo da cena: degradê vertical claro com vinheta discreta nos cantos (fica parado na tela). */
 export function backdropTexture(): CanvasTexture {
-  if (backdrop) return backdrop;
+  if (backdrop && backdropMode === themeMode()) return backdrop;
+  backdropMode = themeMode();
   const [c, ctx] = canvas(256, 256);
   const v = ctx.createLinearGradient(0, 0, 0, 256);
   v.addColorStop(0, SCENE.ground[0]);
@@ -89,7 +93,7 @@ export function backdropTexture(): CanvasTexture {
   ctx.fillRect(0, 0, 256, 256);
   const r = ctx.createRadialGradient(128, 118, 60, 128, 128, 190);
   r.addColorStop(0, 'rgba(255, 255, 255, 0)');
-  r.addColorStop(1, 'rgba(128, 126, 112, 0.18)');
+  r.addColorStop(1, SCENE.vignette);
   ctx.fillStyle = r;
   ctx.fillRect(0, 0, 256, 256);
   backdrop = new CanvasTexture(c);
@@ -101,24 +105,26 @@ export function backdropTexture(): CanvasTexture {
 export const GROUND_TILE = 5;
 
 let ground: CanvasTexture | null = null;
+let groundMode: ThemeMode | null = null;
 /**
  * Chão infinito: um ladrilho de 5 × 5 casas, com linhas finas a cada casa e uma linha um pouco
  * mais forte na borda do ladrilho. Repetido num plano que acompanha a câmera.
  */
 export function groundTexture(): CanvasTexture {
-  if (ground) return ground;
+  if (ground && groundMode === themeMode()) return ground;
+  groundMode = themeMode();
   const cell = 64;
   const size = cell * GROUND_TILE;
   const [c, ctx] = canvas(size, size);
-  ctx.fillStyle = RAMP.neutro[50];
+  ctx.fillStyle = SCENE.tile[0];
   ctx.fillRect(0, 0, size, size);
   // as linhas ficam na borda das casas: metade de cada lado da emenda, para a repetição fechar certinho
-  ctx.fillStyle = RAMP.neutro[100];
+  ctx.fillStyle = SCENE.tile[1];
   for (let i = 1; i < GROUND_TILE; i++) {
     ctx.fillRect(i * cell - 1, 0, 2, size);
     ctx.fillRect(0, i * cell - 1, size, 2);
   }
-  ctx.fillStyle = RAMP.neutro[200];
+  ctx.fillStyle = SCENE.tile[2];
   ctx.fillRect(0, 0, 1, size);
   ctx.fillRect(size - 1, 0, 1, size);
   ctx.fillRect(0, 0, size, 1);
@@ -130,3 +136,4 @@ export function groundTexture(): CanvasTexture {
   ground.anisotropy = 4;
   return ground;
 }
+

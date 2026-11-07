@@ -7,7 +7,7 @@ import { Effects } from './effects';
 import { edgeCurve, queueSlot, TOKEN_H, workerSlot } from './layout';
 import { buildNode, DOOR_OPEN, type NodeView } from './nodes';
 import { backdropTexture, beltTexture, flowTexture, GROUND_TILE, groundTexture } from './textures';
-import { RAMP, SCENE, WORKER } from '../theme';
+import { SCENE, WORKER } from '../theme';
 
 /*
  * Vitrine da tela inicial: produtor → fila → consumidor com as peças do jogo, numa coreografia
@@ -30,11 +30,8 @@ const QUEUE_CAP = 14;
 const DOOR_MS = 420;
 const MAX_TOKENS = 64;
 
-const PAD = {
-  busy: new Color(WORKER.busy),
-  polling: new Color(WORKER.polling),
-  idle: new Color(WORKER.idle),
-};
+/** Cores dos pads (atualizadas a cada montagem: dependem do modo claro/noturno). */
+const PAD = { busy: new Color(), polling: new Color(), idle: new Color() };
 
 type Phase = 'out' | 'queued' | 'in' | 'work' | 'done';
 
@@ -98,6 +95,9 @@ export function mountShowcase(container: HTMLElement, opts: ShowcaseOptions): ()
   container.appendChild(labels.domElement);
 
   const scene = new Scene();
+  PAD.busy.set(WORKER.busy);
+  PAD.polling.set(WORKER.polling);
+  PAD.idle.set(WORKER.idle);
   scene.background = backdropTexture();
   scene.fog = new Fog(SCENE.fog, 26, 60);
   const camera = new PerspectiveCamera(28, 1, 0.1, 200);
@@ -121,7 +121,7 @@ export function mountShowcase(container: HTMLElement, opts: ShowcaseOptions): ()
   for (const v of Object.values(views)) scene.add(v.group);
 
   // canos
-  const pipeTex = flowTexture(RAMP.neutro[200], RAMP.neutro[400]);
+  const pipeTex = flowTexture(SCENE.pipe[0], SCENE.pipe[1]);
   const pipe = (curve: Curve<Vector3>) => {
     const geo = new TubeGeometry(curve, 48, PIPE_RADIUS, 10, false);
     const uv = geo.getAttribute('uv');

@@ -8,16 +8,17 @@ const ROW = 7;
 const GAP = 2;
 const WIDTH = 300;
 
-const COLOR: Record<InvocationRecord['outcome'] | 'running' | 'init', string> = {
+/** Cores das barras (lidas na hora: mudam com o modo claro/noturno). */
+const colors = (): Record<InvocationRecord['outcome'] | 'running' | 'init', string> => ({
   init: WORKER.cold,
-  running: RAMP.verde[300],
+  running: RAMP.verde[400],
   ok: OUTCOME.ok,
   partial: OUTCOME.warn,
   error: OUTCOME.bad,
   timeout: OUTCOME.bad,
   db: RAMP.neutro[400],
-  throttled: RAMP.vermelho[800],
-};
+  throttled: RAMP.vermelho[700],
+});
 
 interface Bar {
   row: number;
@@ -42,6 +43,7 @@ const OUTCOME_LABEL: Record<InvocationRecord['outcome'], string> = {
  */
 export function InvocationTimeline({ nodeId }: { nodeId: string }) {
   const ctrl = useController();
+  const COLOR = colors();
   useTicker(ctrl.mode === 'run', 250);
   const sim = ctrl.sim;
   const c = sim?.consumers.get(nodeId);
@@ -80,7 +82,7 @@ export function InvocationTimeline({ nodeId }: { nodeId: string }) {
       <svg viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" role="img" aria-label={`Linha do tempo das invocações de ${c.node.name}`}>
         {Array.from({ length: rows }, (_, j) => (
           // instâncias além da concorrência atual ficam apagadas
-          <rect key={`r${j}`} x={0} y={j * (ROW + GAP)} width={WIDTH} height={ROW} fill={j < c.active ? RAMP.neutro[100] : RAMP.neutro[50]} />
+          <rect key={`r${j}`} x={0} y={j * (ROW + GAP)} width={WIDTH} height={ROW} style={{ fill: j < c.active ? 'var(--surface-2)' : 'var(--panel-2)' }} />
         ))}
         {bars.map((b, i) => (
           <rect key={i} x={x(b.from)} y={b.row * (ROW + GAP)} width={Math.max(1, x(b.to) - x(b.from))} height={ROW} fill={b.color}>

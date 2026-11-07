@@ -1,17 +1,23 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { CATEGORY, PALETTE, RAMP, SERVICE } from '../../src/theme';
+import { CATEGORY, PALETTE, RAMP, SCENE, SCENE_THEMES, SERVICE, setThemeMode, themeMode } from '../../src/theme';
 
 const css = readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8');
-const root = css.slice(css.indexOf(':root {'), css.indexOf('\n}\n', css.indexOf(':root {')));
+const block = (selector: string) => {
+  const i = css.indexOf(selector);
+  if (i < 0) throw new Error(`${selector} não está no CSS`);
+  return css.slice(i, css.indexOf('\n}\n', i));
+};
+const LIGHT = block(':root {');
+const DARK = block(":root[data-theme='dark'] {");
 
-/** Valor de uma variável do :root, seguindo var(--x) até chegar numa cor. */
-function token(name: string): string {
-  const m = root.match(new RegExp(`--${name}:\\s*([^;]+);`));
-  if (!m) throw new Error(`--${name} não está no :root`);
-  const v = m[1].trim();
+/** Valor de uma variável, seguindo var(--x) até chegar numa cor. No escuro, cai para o claro. */
+function token(name: string, mode: 'light' | 'dark' = 'light'): string {
+  const find = (src: string) => src.match(new RegExp(`--${name}:\\s*([^;]+);`))?.[1].trim();
+  const v = (mode === 'dark' ? find(DARK) : undefined) ?? find(LIGHT);
+  if (!v) throw new Error(`--${name} não está no :root`);
   const ref = v.match(/^var\(--([a-z0-9-]+)\)$/);
-  return ref ? token(ref[1]) : v.toLowerCase();
+  return ref ? token(ref[1], mode) : v.toLowerCase();
 }
 
 const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
@@ -24,17 +30,22 @@ function contrast(a: string, b: string): number {
   return (x + 0.05) / (y + 0.05);
 }
 
+const PIECES = { producer: 'producer', topic: 'sns', queue: 'sqs', dlq: 'dlq', consumer: 'consumer', lambda: 'lambda' } as const;
+
 describe('tema', () => {
-  it('as escalas do CSS são as mesmas de src/theme.ts', () => {
+  it('as escalas e a paleta do CSS são as mesmas de src/theme.ts', () => {
     for (const [name, ramp] of Object.entries(RAMP)) {
       for (const [step, hex] of Object.entries(ramp)) expect(token(`${name}-${step}`), `--${name}-${step}`).toBe(hex);
     }
     for (const [name, hex] of Object.entries(PALETTE)) expect(token(name)).toBe(hex);
   });
 
-  it('as cores de serviço do CSS são as da cena', () => {
-    const css = { producer: 'producer', topic: 'sns', queue: 'sqs', dlq: 'dlq', consumer: 'consumer', lambda: 'lambda' } as const;
-    for (const [kind, name] of Object.entries(css)) expect(token(name), kind).toBe(SERVICE[kind as keyof typeof SERVICE].toLowerCase());
+  it('as cores das peças no CSS são as da cena, nos dois modos', () => {
+    for (const mode of ['light', 'dark'] as const) {
+      for (const [kind, name] of Object.entries(PIECES)) {
+        expect(token(name, mode), `${mode} ${kind}`).toBe(SCENE_THEMES[mode].service[kind as keyof typeof PIECES].toLowerCase());
+      }
+    }
   });
 
   it('em cada escala, o degrau 600 serve de texto sobre branco e o 500 de ícone', () => {
@@ -44,21 +55,19 @@ describe('tema', () => {
     }
   });
 
-  // WCAG 1.4.3 (texto ≥ 4,5:1) e 1.4.11 (bordas de campo e foco ≥ 3:1)
-  it.each([
+  // WCAG 1.4.3 (texto ≥ 4,5:1) e 1.4.11 (bordas de campo, foco e contornos ≥ 3:1), nos dois modos
+  const PAIRS = [
     ['text', 'bg', 4.5],
     ['text-2', 'bg', 4.5],
     ['muted', 'panel', 4.5],
     ['muted', 'bg', 4.5],
-    ['accent', 'panel', 4.5],
     ['on-primary', 'primary', 4.5],
     ['on-primary', 'primary-hover', 4.5],
+    ['primary-text', 'panel', 4.5],
+    ['highlight-text', 'panel', 4.5],
     ['ok', 'ok-soft', 4.5],
     ['bad', 'bad-soft', 4.5],
     ['warn', 'warn-soft', 4.5],
-    ['highlight-text', 'panel', 4.5],
-    ['on-primary', 'highlight-fill', 4.5],
-    ['on-primary', 'ok-fill', 4.5],
     ['on-sqs', 'sqs', 4.5],
     ['on-sns', 'sns', 4.5],
     ['on-lambda', 'lambda', 4.5],
@@ -67,11 +76,27 @@ describe('tema', () => {
     ['on-consumer', 'consumer', 4.5],
     ['sns-text', 'panel', 4.5],
     ['sqs-text', 'panel', 4.5],
+    ['on-badge-strong', 'badge-strong', 4.5],
+    ['tip-text', 'tip-bg', 4.5],
     ['input-border', 'panel', 3],
     ['focus', 'bg', 3],
-    ['star-edge', 'panel', 3],
-  ] as const)('--%s sobre --%s ≥ %s:1', (fg, bg, min) => {
-    expect(contrast(token(fg), token(bg))).toBeGreaterThanOrEqual(min);
+    ['highlight-border', 'panel', 3],
+    ['btn-ink', 'panel', 3],
+  ] as const;
+  for (const mode of ['light', 'dark'] as const) {
+    it.each(PAIRS)(`${mode}: --%s sobre --%s ≥ %s:1`, (fg, bg, min) => {
+      expect(contrast(token(fg, mode), token(bg, mode))).toBeGreaterThanOrEqual(min);
+    });
+  }
+
+  it('trocar o modo troca as cores da cena', () => {
+    const before = themeMode();
+    setThemeMode('dark');
+    expect(SERVICE.queue).toBe(SCENE_THEMES.dark.service.queue);
+    expect(SCENE.fog).toBe(SCENE_THEMES.dark.scene.fog);
+    setThemeMode('light');
+    expect(SERVICE.queue).toBe(SCENE_THEMES.light.service.queue);
+    setThemeMode(before);
   });
 
   it('cores categóricas não se repetem', () => {

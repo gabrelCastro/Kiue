@@ -9,7 +9,11 @@ import type { Chapter } from './study/types';
 import { Controller } from './game/controller';
 import { App } from './ui/App';
 import { ControllerContext } from './ui/hooks';
+import { applyTheme } from './ui/theme-mode';
 import './styles.css';
+
+// modo claro/noturno: o index.html já marcou o <html>; aqui a paleta da cena acompanha
+applyTheme();
 
 const ctrl = new Controller();
 

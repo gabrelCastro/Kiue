@@ -45,35 +45,44 @@ import { backdropTexture, beltTexture, flowTexture, GROUND_TILE, groundTexture }
 import { bakedMaterial, bakeGeometry, bakeTree } from './bake';
 import { buildNode, DOOR_OPEN, NODE_COLORS, type NodeView } from './nodes';
 import { describeNode } from './labels';
-import { OUTCOME, RAMP, SCENE, WORKER } from '../theme';
+import { OUTCOME, SCENE, WORKER } from '../theme';
 
+/*
+ * Cores pré-calculadas (o frame não interpreta strings). Dependem do modo claro/noturno:
+ * `refreshColors` as atualiza quando a cena é montada.
+ */
 const MAX_TOKENS = 4000;
-const DIM_COLOR = new Color(SCENE.dim);
-const BAR_COLOR = new Color(RAMP.neutro[800]);
+const DIM_COLOR = new Color();
+const BAR_COLOR = new Color();
 /** Barra de timeout da invocação da Lambda: folga, perto do limite, quase estourando. */
-const TIMEOUT_OK = new Color(OUTCOME.ok);
-const TIMEOUT_WARN = new Color(OUTCOME.warn);
-const TIMEOUT_BAD = new Color(OUTCOME.bad);
-/** Cores dos pads de worker por estado (pré-calculadas: o frame não interpreta strings). */
+const TIMEOUT_OK = new Color();
+const TIMEOUT_WARN = new Color();
+const TIMEOUT_BAD = new Color();
+/** Cores dos pads de worker por estado. */
 const PAD = {
   /** Lambda: instância iniciando (cold start). */
-  cold: new Color(WORKER.cold),
-  down: new Color(WORKER.down),
-  busy: new Color(WORKER.busy),
-  polling: new Color(WORKER.polling),
-  off: new Color(WORKER.off),
-  idle: new Color(WORKER.idle),
+  cold: new Color(),
+  down: new Color(),
+  busy: new Color(),
+  polling: new Color(),
+  off: new Color(),
+  idle: new Color(),
 };
-const DOWN_BODY = new Color(RAMP.vermelho[300]);
+const DOWN_BODY = new Color();
+function refreshColors(): void {
+  DIM_COLOR.set(SCENE.dim);
+  BAR_COLOR.set(SCENE.bar);
+  TIMEOUT_OK.set(OUTCOME.ok);
+  TIMEOUT_WARN.set(OUTCOME.warn);
+  TIMEOUT_BAD.set(OUTCOME.bad);
+  for (const k of Object.keys(PAD) as (keyof typeof PAD)[]) PAD[k].set(WORKER[k]);
+  DOWN_BODY.set(SCENE.downBody);
+}
 const MAX_BARS = 300;
-/** Cor da névoa: o chão infinito some suavemente nela, ao longe. */
-const FOG_COLOR = SCENE.fog;
 /** Tamanho do plano do chão; ele segue a câmera, então só precisa cobrir a tela no zoom mínimo. */
 const GROUND_SIZE = 400;
 /** Raio dos canos entre as peças. */
 const PIPE_RADIUS = 0.085;
-/** Contorno de seleção: a cor do texto da interface. */
-const SELECT_COLOR = SCENE.select;
 const VIEW_WIDTH = 23;
 const VIEW_HEIGHT_MIN = 13;
 /**
@@ -88,8 +97,8 @@ const CAMERA_DISTANCE = 40;
 const FIT_ZOOM_MIN = 0.8;
 const FIT_ZOOM_MAX = 1.8;
 
-const FLOW_PIPE = () => flowTexture(RAMP.neutro[200], RAMP.neutro[400]);
-const FLOW_SNS = () => flowTexture(RAMP.ciano[200], RAMP.ciano[500]);
+const FLOW_PIPE = () => flowTexture(SCENE.pipe[0], SCENE.pipe[1]);
+const FLOW_SNS = () => flowTexture(SCENE.topicPipe[0], SCENE.topicPipe[1]);
 
 /** Moldura de seleção: retângulo arredondado vazado, no chão, em volta da peça. */
 function frameGeometry(w: number, d: number, thickness = 0.07, radius = 0.35): ShapeGeometry {
@@ -205,8 +214,9 @@ export class SceneView {
     this.labels.domElement.className = 'label-layer';
     container.appendChild(this.labels.domElement);
 
+    refreshColors();
     this.scene.background = backdropTexture();
-    this.scene.fog = new Fog(FOG_COLOR, 60, 120);
+    this.scene.fog = new Fog(SCENE.fog, 60, 120);
 
     this.camera = new OrthographicCamera(-10, 10, 10, -10, 0.1, 200);
     this.camera.position.copy(CAMERA_DIR).multiplyScalar(CAMERA_DISTANCE);
@@ -262,7 +272,7 @@ export class SceneView {
     this.ghost.visible = false;
     this.scene.add(this.ghost);
 
-    this.selectRing = new Mesh(new BufferGeometry(), new MeshBasicMaterial({ color: SELECT_COLOR, transparent: true, opacity: 0.9 }));
+    this.selectRing = new Mesh(new BufferGeometry(), new MeshBasicMaterial({ color: SCENE.select, transparent: true, opacity: 0.9 }));
     this.selectRing.rotation.x = -Math.PI / 2;
     this.selectRing.position.y = 0.03;
     this.selectRing.visible = false;
@@ -755,7 +765,7 @@ export class SceneView {
         this.selectRing.geometry = kind === 'queue' ? frameGeometry(QUEUE_LEN + 0.7, QUEUE_DEPTH + 0.7) : frameGeometry(2.4 * NODE_SCALE * 0.85, 2.4 * NODE_SCALE * 0.85);
       }
       const connecting = this.ctrl.tool.type === 'connect';
-      (this.selectRing.material as MeshBasicMaterial).color.set(connecting ? SCENE.connect : SELECT_COLOR);
+      (this.selectRing.material as MeshBasicMaterial).color.set(connecting ? SCENE.connect : SCENE.select);
       (this.selectRing.material as MeshBasicMaterial).opacity = connecting ? 0.6 + 0.3 * Math.sin(t * 6) : 0.85;
     } else this.selectRing.visible = false;
 

@@ -21,7 +21,7 @@ import { beltTexture, contactShadowTexture } from './textures';
 import { BENCH_TOP, LAMBDA_DECK_H, LIFT, NODE_SCALE, QUEUE_DEPTH, QUEUE_HEIGHT, QUEUE_LEN, TOKEN_H, workerCell } from './layout';
 import { ArmRig } from './robots';
 import { LambdaStation } from './station';
-import { PALETTE, SCENE, SERVICE, WORKER } from '../theme';
+import { SCENE, SERVICE, WORKER } from '../theme';
 
 /** Cor de cada serviço (src/theme.ts; as mesmas variáveis --producer, --sns... de styles.css). */
 export const NODE_COLORS = SERVICE;
@@ -86,8 +86,8 @@ function rounded(w: number, h: number, d: number, radius = 0.1) {
   return new RoundedBoxGeometry(w, h, d, 3, Math.min(radius, w / 2, h / 2, d / 2));
 }
 
-/** Mistura a cor da peça com `toward` (por padrão, branco: tons claros para bases e detalhes). */
-function shade(color: string, amount: number, toward = '#ffffff'): string {
+/** Mistura a cor da peça com `toward` (por padrão, a base do modo: claro de dia, grafite à noite). */
+function shade(color: string, amount: number, toward = SCENE.base): string {
   return `#${new Color(color).lerp(new Color(toward), amount).getHexString()}`;
 }
 
@@ -203,7 +203,7 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
       model.add(tray, belt, part('fila/rolos', mat(SCENE.metal)), part('fila/detalhe', mat(SCENE.dark)), frame, body);
       // FIFO: guias formam uma pista única ("uma por vez, em ordem"); DLQ: faixas de alerta
       if (fifo) model.add(part('fila/guias', mat(SCENE.dark)));
-      if (isDlq) model.add(part('fila/alerta', mat(PALETTE.amarelo)));
+      if (isDlq) model.add(part('fila/alerta', mat(SCENE.accent)));
       pickables.push(body, frame, tray);
       labelY = lift + QUEUE_HEIGHT + 0.45;
       break;
@@ -228,7 +228,7 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
         model.add(pad);
         workerPads.push(pad);
       }
-      arms = new ArmRig(cells, { base: mat(PALETTE.amarelo), arm: mat(PALETTE.amarelo), fore: mat(SCENE.dark) }, TOKEN_H * 1.05 / NODE_SCALE);
+      arms = new ArmRig(cells, { base: mat(SCENE.accent), arm: mat(SCENE.accent), fore: mat(SCENE.dark) }, TOKEN_H * 1.05 / NODE_SCALE);
       model.add(...arms.meshes);
       pickables.push(body, base);
       labelY = 1.6;

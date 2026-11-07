@@ -55,11 +55,11 @@ export interface MessageType {
 }
 
 export const MESSAGE_TYPES: MessageType[] = [
-  { value: 'pedido', label: 'Pedido', color: CATEGORY.ciano },
+  { value: 'pedido', label: 'Pedido', color: CATEGORY.azulClaro },
   { value: 'livro', label: 'Livro', color: CATEGORY.violeta },
-  { value: 'eletronico', label: 'Eletrônico', color: CATEGORY.amarelo },
-  { value: 'roupa', label: 'Roupa', color: CATEGORY.magenta },
-  { value: 'comida', label: 'Comida', color: CATEGORY.bordo },
+  { value: 'eletronico', label: 'Eletrônico', color: CATEGORY.ambar },
+  { value: 'roupa', label: 'Roupa', color: CATEGORY.rosa },
+  { value: 'comida', label: 'Comida', color: CATEGORY.marrom },
 ];
 
 export const POISON_COLOR = RAMP.neutro[950];
@@ -69,7 +69,7 @@ export function typeInfo(value: string): MessageType {
 }
 
 /** Cores por MessageGroupId (usadas quando a fase destaca grupos); separáveis com daltonismo (src/theme.ts). */
-export const GROUP_COLORS = [CATEGORY.magenta, CATEGORY.ciano, CATEGORY.verde, CATEGORY.laranja, CATEGORY.violeta, CATEGORY.amarelo];
+export const GROUP_COLORS = [CATEGORY.azulClaro, CATEGORY.coral, CATEGORY.ambar, CATEGORY.verdeEscuro, CATEGORY.violeta, CATEGORY.mostarda];
 
 export function groupColor(groupId: string | null): string | null {
   if (!groupId) return null;

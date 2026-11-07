@@ -8,6 +8,8 @@ import { useController } from './hooks';
 import { SavedSandboxes } from './SavedSandboxes';
 import { Stars } from './Result';
 import { StudyCard } from './Study';
+import { ThemeButton } from './ThemeButton';
+import { useTheme } from './theme-mode';
 import { CheckIcon, LockIcon } from './icons';
 
 export function Menu() {
@@ -37,6 +39,7 @@ export function Menu() {
         <button class="btn" onClick={() => ctrl.startLevel('sandbox')}>
           Sandbox
         </button>
+        <ThemeButton />
         <AccountButton />
       </nav>
       <div class="menu">
@@ -309,6 +312,8 @@ const NARROW = '(max-width: 760px)';
 function Showcase() {
   const ref = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
+  // a vitrine é remontada quando o modo claro/noturno muda (as cores da cena são lidas na montagem)
+  const { mode } = useTheme();
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -330,7 +335,7 @@ function Showcase() {
       cancelled = true;
       dispose?.();
     };
-  }, []);
+  }, [mode]);
   return (
     <div
       ref={ref}

@@ -24,12 +24,12 @@ const chunk = (type, data) => {
 
 /** `safe`: o logo ocupa a zona segura central (ícone "maskable" é recortado pelo sistema). */
 function png(size, safe) {
-  // fundo petróleo escuro: as três cores vivas da paleta (src/theme.ts) se destacam nele
-  const bg = [0x1a, 0x32, 0x36];
+  // fundo grafite do modo noturno: coral, âmbar e o azul da marca (src/theme.ts) se destacam nele
+  const bg = [0x0e, 0x11, 0x17];
   const cubes = [
-    { c: [0xd6, 0x33, 0x7c], i: 0 },
-    { c: [0xd6, 0xc5, 0x33], i: 1 },
-    { c: [0x34, 0xbf, 0xd7], i: 2 },
+    { c: [0xff, 0x7a, 0x59], i: 0 },
+    { c: [0xff, 0xc5, 0x31], i: 1 },
+    { c: [0x4f, 0x7b, 0xff], i: 2 },
   ];
   const span = size * (safe ? 0.5 : 0.72); // largura total do trio
   const cube = span / 3.3;

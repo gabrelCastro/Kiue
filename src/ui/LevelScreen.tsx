@@ -7,6 +7,8 @@ import type { GoalResult } from '../game/goals';
 import type { GraphNode } from '../sim/types';
 import { auth } from '../auth/store';
 import { AccountButton } from './auth/AccountButton';
+import { ThemeButton } from './ThemeButton';
+import { useTheme } from './theme-mode';
 import { loadScene } from './scene-loader';
 import { Briefing } from './Briefing';
 import { describeEvent, fmtTime, type LogLine } from './format';
@@ -65,6 +67,8 @@ export function LevelScreen() {
 function SceneHost() {
   const ctrl = useController();
   const ref = useRef<HTMLDivElement>(null);
+  // a cena é remontada quando o modo claro/noturno muda (as cores são lidas na montagem)
+  const { mode } = useTheme();
   useEffect(() => {
     let disposed = false;
     let dispose = () => {};
@@ -83,7 +87,7 @@ function SceneHost() {
       disposed = true;
       dispose();
     };
-  }, [ctrl]);
+  }, [ctrl, mode]);
   return <div class="scene-host" ref={ref} />;
 }
 
@@ -142,6 +146,7 @@ function TopBar() {
         <button class="btn ghost" onClick={() => ctrl.study.openPanel(ctrl.level?.id ?? null)}>
           Estudar
         </button>
+        <ThemeButton />
         <AccountButton />
       </div>
     </header>
@@ -608,6 +613,7 @@ function CompactTopBar() {
             <button class="btn ghost" onClick={close(() => ctrl.study.openPanel(ctrl.level?.id ?? null))}>
               Estudar
             </button>
+            <ThemeButton withText />
             <div class="more-account" onClick={() => setMenu(false)}>
               <AccountButton />
             </div>
