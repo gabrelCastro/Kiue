@@ -1616,13 +1616,37 @@ details p {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
-/* Tema do sandbox: o seletor ocupa a largura do painel */
-.sandbox-theme .segmented {
-  display: flex;
+/* Tema do sandbox: uma grade de botões (dois por linha) */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
 }
-.sandbox-theme .segmented button {
-  flex: 1;
-  padding: 6px 8px;
+.theme-grid button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 7px 6px;
+  color: var(--text-2);
+  background: var(--panel);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: center;
+}
+.theme-grid button:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.theme-grid button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-primary);
+}
+.theme-grid button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .sandbox-file-form {

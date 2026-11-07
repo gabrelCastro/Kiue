@@ -45,6 +45,9 @@ import { backdropTexture, beltTexture, flowTexture, GROUND_TILE, groundTexture }
 import { bakedMaterial, bakeGeometry, bakeTree, isShared } from './bake';
 import { buildNode, NODE_COLORS, type NodeView } from './nodes';
 import { kitFor, loadKit, type ThemeKit } from './themes';
+
+/** Baixa o kit do tema antes de montar a cena (ela já nasce com as peças certas). */
+export { loadKit as preloadTheme };
 import { describeNode } from './labels';
 import { OUTCOME, SCENE, WORKER } from '../theme';
 
@@ -312,6 +315,11 @@ export class SceneView {
     requestAnimationFrame(this.loop);
   }
 
+  /** A cena mostra a montagem atual (o tema já chegou e as peças estão na tela). */
+  get ready(): boolean {
+    return this.builtVersion === this.ctrl.graphVersion && this.builtLevel === (this.ctrl.level?.id ?? null);
+  }
+
   /** Converte uma posição do chão (x, z) em coordenadas de tela (px, relativas à página). */
   project(x: number, z: number, y = 0.5): { x: number; y: number } {
     const v = new Vector3(x, y, z).project(this.camera);
@@ -519,6 +527,11 @@ export class SceneView {
     // tema ainda baixando: mantém a cena atual e monta quando o kit chegar (próximo quadro)
     const kit = kitFor(this.ctrl.visualTheme);
     if (!kit) {
+      // trocou de fase: melhor a cena vazia por um instante que as peças da fase anterior
+      if (this.builtLevel !== levelId && this.nodeViews.size) {
+        this.clearWorld();
+        this.dirty = true;
+      }
       void loadKit(this.ctrl.visualTheme).then(() => (this.dirty = true));
       return;
     }

@@ -23,6 +23,8 @@ async function openLevel(page: Page, id: string) {
     await ctrl.openLevel(id);
     ctrl.setBriefing(false);
   }, id);
+  // o tema da fase pode vir num arquivo à parte: espera a cena montar as peças
+  await page.waitForFunction(() => (window as unknown as { __kiue: { view: { ready: boolean } } }).__kiue.view.ready);
   await page.waitForTimeout(200);
   return errors;
 }

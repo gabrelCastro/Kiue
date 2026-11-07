@@ -74,7 +74,9 @@ function SceneHost() {
   useEffect(() => {
     let disposed = false;
     let dispose = () => {};
-    void loadScene().then(({ SceneView }) => {
+    void loadScene().then(async ({ SceneView, preloadTheme }) => {
+      // o tema da fase vem num arquivo à parte: espera chegar para a cena já nascer completa
+      await preloadTheme(ctrl.visualTheme).catch(() => {});
       if (disposed) return;
       const view = new SceneView(ref.current!, ctrl);
       // gancho para testes e2e

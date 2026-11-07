@@ -11,7 +11,7 @@ export function SandboxTheme() {
   return (
     <div class="panel sandbox-theme">
       <h3 id="sandbox-theme-title">Tema</h3>
-      <div class="segmented" role="group" aria-labelledby="sandbox-theme-title">
+      <div class="theme-grid" role="group" aria-labelledby="sandbox-theme-title">
         {VISUAL_THEMES.map((t) => (
           <button key={t.id} class={current === t.id ? 'active' : ''} aria-pressed={current === t.id} onClick={() => ctrl.setSandboxTheme(t.id)}>
             {t.name}

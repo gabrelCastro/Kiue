@@ -28,6 +28,8 @@ for (const id of LEVEL_IDS) {
       ctrl.setSpeed(4);
       ctrl.run();
     }, id);
+    // o tema da fase pode vir num arquivo à parte: espera a cena montar as peças
+    await page.waitForFunction(() => (window as unknown as { __kiue: { view: { ready: boolean } } }).__kiue.view.ready);
     await page.waitForTimeout(2500);
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/tour-${id}.png` });
     await page.getByRole('button', { name: /Concluir agora/ }).click();

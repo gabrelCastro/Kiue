@@ -17,10 +17,20 @@ const MODELS = {
   fila: ['moldura', 'base', 'detalhe', 'rolos', 'guias', 'alerta'],
   produtor: ['corpo', 'telhado', 'detalhe', 'doca', 'janelas', 'portao', 'palete', 'caixas'],
   lambda: ['deck', 'hub', 'hub_detalhe', 'baia', 'trava', 'luz', 'robo_corpo', 'robo_faixa', 'robo_detalhe'],
-  // tema fazenda (src/render/themes/fazenda.ts): vai para models.fazenda.gen.ts, baixado só com o tema
+  // temas (src/render/themes/*.ts): cada um vai para models.<tema>.gen.ts, baixado só com o tema;
+  // o robozinho (models.robo.gen.ts) é comum aos temas que o usam
   robo: ['corpo', 'visor', 'olhos', 'chapeu', 'bracos'],
   fazenda_produtor: ['chao', 'celeiro', 'telhado', 'portao', 'detalhe', 'silo', 'terra', 'verde', 'esteira', 'caixas'],
   fazenda_feira: ['praca', 'detalhe', 'balcao', 'toldo_a', 'toldo_b', 'poste', 'luz'],
+  correio_produtor: ['chao', 'mesa', 'faixa', 'metal', 'detalhe', 'papelao', 'saida'],
+  correio_guiche: ['praca', 'detalhe', 'balcao', 'tampo', 'haste', 'placa', 'luz'],
+  entregas_produtor: ['chao', 'cabine', 'bau', 'faixa', 'rodas', 'vidros', 'farois', 'metal', 'detalhe', 'papelao', 'saida'],
+  entregas_vaga: ['praca', 'detalhe', 'faixa', 'poste', 'luz'],
+  rover: ['corpo', 'parachoque', 'rodas', 'cacamba', 'visor', 'olhos'],
+  fabrica_produtor: ['chao', 'paredes', 'telhado', 'janelas', 'rosto', 'metal', 'papelao', 'saida', 'fumaca'],
+  fabrica_mesa: ['praca', 'detalhe', 'tampo', 'borda', 'pe', 'luz'],
+  gigantes_produtor: ['chao', 'corpo', 'clara', 'rosto', 'olhos', 'cano', 'metal', 'papelao', 'saida', 'detalhe'],
+  gigantes_polvo: ['praca', 'detalhe', 'poste', 'cabeca', 'rosto', 'olhos', 'tapete', 'luz'],
 };
 
 const tmp = mkdtempSync(join(tmpdir(), 'kiue-models-'));
@@ -62,7 +72,20 @@ function pack(stl) {
 }
 
 /** Modelos de cada tema que não é o padrão: arquivo à parte, importado só pelo kit do tema. */
-const THEME_FILES = { robo: 'fazenda', fazenda_produtor: 'fazenda', fazenda_feira: 'fazenda' };
+const THEME_FILES = {
+  robo: 'robo',
+  fazenda_produtor: 'fazenda',
+  fazenda_feira: 'fazenda',
+  correio_produtor: 'correio',
+  correio_guiche: 'correio',
+  entregas_produtor: 'entregas',
+  entregas_vaga: 'entregas',
+  rover: 'entregas',
+  fabrica_produtor: 'fabrica',
+  fabrica_mesa: 'fabrica',
+  gigantes_produtor: 'gigantes',
+  gigantes_polvo: 'gigantes',
+};
 
 const files = new Map(); // arquivo → linhas
 let total = 0;

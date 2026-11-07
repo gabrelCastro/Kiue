@@ -1,4 +1,6 @@
 import { Controller } from '../../src/game/controller';
+import { CATALOG } from '../../src/game/level-catalog';
+import { VISUAL_THEMES } from '../../src/game/visual-themes';
 import { ALL_LEVELS, levelById } from '../../content/levels';
 import type { GraphNode } from '../../src/sim/types';
 
@@ -342,13 +344,22 @@ describe('tema visual', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('fase sem tema no catálogo usa Indústria', () => {
-    expect(open('i01').visualTheme).toBe('industria');
+  it('fase sem tema no catálogo usa Indústria (o Exame final)', () => {
+    expect(open('c12').visualTheme).toBe('industria');
   });
 
   it('fase com tema no catálogo usa o tema dela', () => {
+    expect(open('i01').visualTheme).toBe('correio');
+    expect(open('i02').visualTheme).toBe('entregas');
     expect(open('i03').visualTheme).toBe('fazenda');
-    expect(open('i10').visualTheme).toBe('fazenda');
+    expect(open('i04').visualTheme).toBe('fabrica');
+    expect(open('i07').visualTheme).toBe('gigantes');
+  });
+
+  it('todo tema do catálogo existe e todos os temas aparecem em alguma fase', () => {
+    const used = new Set(CATALOG.map((l) => l.theme ?? 'industria'));
+    for (const t of used) expect(VISUAL_THEMES.some((v) => v.id === t), t).toBe(true);
+    for (const v of VISUAL_THEMES) expect(used.has(v.id), v.id).toBe(true);
   });
 
   it('no Sandbox o jogador escolhe: vai no grafo (salvo junto), marca alteração e vira o padrão do navegador', () => {
@@ -369,7 +380,7 @@ describe('tema visual', () => {
   it('fora do Sandbox não troca o tema', () => {
     const c = open('i01');
     c.setSandboxTheme('fazenda');
-    expect(c.visualTheme).toBe('industria');
+    expect(c.visualTheme).toBe('correio');
     expect(c.graph.theme).toBeUndefined();
   });
 

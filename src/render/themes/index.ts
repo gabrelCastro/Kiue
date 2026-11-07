@@ -11,6 +11,10 @@ export type { ConsumerBuild, ProducerBuild, SendFx, ThemeKit, WorkerPose, Worker
 const LOADED: Partial<Record<VisualTheme, ThemeKit>> = { industria };
 const LOADERS: Record<Exclude<VisualTheme, 'industria'>, () => Promise<ThemeKit>> = {
   fazenda: () => import('./fazenda').then((m) => m.fazenda),
+  entregas: () => import('./entregas').then((m) => m.entregas),
+  correio: () => import('./correio').then((m) => m.correio),
+  fabrica: () => import('./fabrica').then((m) => m.fabrica),
+  gigantes: () => import('./gigantes').then((m) => m.gigantes),
 };
 const pending = new Map<VisualTheme, Promise<ThemeKit>>();
 
