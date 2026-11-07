@@ -1,3 +1,4 @@
+import type { VisualTheme } from '../game/visual-themes';
 // Modelo de dados da simulação. Tempos de configuração em segundos (como na AWS);
 // internamente o motor trabalha em milissegundos de jogo.
 
@@ -125,6 +126,8 @@ export interface GraphEdge {
 export interface Graph {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  /** Só no Sandbox: o tema visual escolhido (vai junto quando o sandbox é salvo). */
+  theme?: VisualTheme;
 }
 
 /** Uma cópia física de uma mensagem. `logicalId` identifica o pedido de negócio. */

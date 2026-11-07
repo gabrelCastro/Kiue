@@ -43,7 +43,8 @@ import { Effects } from './effects';
 import { dlqCurve, edgeCurve, LAMBDA_BATCH_SCALE, LAMBDA_DECK_H, lambdaSlot, NODE_SCALE, QUEUE_DEPTH, QUEUE_LEN, queueSlot, TOKEN_H, workerSlot } from './layout';
 import { backdropTexture, beltTexture, flowTexture, GROUND_TILE, groundTexture } from './textures';
 import { bakedMaterial, bakeGeometry, bakeTree } from './bake';
-import { buildNode, DOOR_OPEN, NODE_COLORS, type NodeView } from './nodes';
+import { buildNode, NODE_COLORS, type NodeView } from './nodes';
+import { kitFor, type ThemeKit } from './themes';
 import { describeNode } from './labels';
 import { OUTCOME, SCENE, WORKER } from '../theme';
 
@@ -89,8 +90,6 @@ const VIEW_HEIGHT_MIN = 13;
  * Direção da câmera (ortográfica), em vista de diorama: ~51° de elevação e girada ~22° para a
  * direita, mostrando a frente e a lateral das peças. Mais baixa, as filas empilhadas se cobrem.
  */
-/** Duração de uma abertura do portão do produtor (ms). */
-const DOOR_MS = 420;
 const CAMERA_DIR = new Vector3(0.4, 1.35, 1).normalize();
 const CAMERA_DISTANCE = 40;
 /** Limites do zoom automático ao abrir uma fase: perto o bastante para ver as peças, sem cortar a área de montagem. */
@@ -136,6 +135,8 @@ export class SceneView {
   private controls: OrbitControls;
   private world = new Group();
   private nodeViews = new Map<string, NodeView>();
+  /** Kit do tema visual da montagem atual (escolhido a cada reconstrução: fase ou Sandbox). */
+  private kit: ThemeKit = kitFor('industria');
   private curves = new Map<string, Curve<Vector3>>();
   private edgeViews: EdgeView[] = [];
   private tokens: InstancedMesh;
@@ -506,6 +507,7 @@ export class SceneView {
     this.builtLevel = levelId;
     if (levelChanged) this.autoFit = true;
     this.clearWorld();
+    this.kit = kitFor(this.ctrl.visualTheme);
     const g = this.ctrl.graph;
     const dlqs = dlqIds(g);
 
@@ -515,7 +517,7 @@ export class SceneView {
     }
     this.knownIds = new Set(g.nodes.map((n) => n.id));
     for (const n of g.nodes) {
-      const view = buildNode(n, dlqs.has(n.id));
+      const view = buildNode(n, dlqs.has(n.id), this.kit);
       this.nodeViews.set(n.id, view);
       this.world.add(view.group);
     }
@@ -641,11 +643,8 @@ export class SceneView {
     }
 
     for (const v of this.nodeViews.values()) {
-      if (v.door) {
-        // portão do produtor: enrola e desenrola em DOOR_MS a cada mensagem enviada
-        const p = (now - v.doorAt) / DOOR_MS;
-        v.door.scale.y = 1 - (p < 1 ? DOOR_OPEN * Math.sin(Math.PI * p) : 0);
-      }
+      // produtor: a animação de envio do tema (portão, fazendeiro…)
+      v.send?.update(now);
       for (const s of v.spinners) {
         const busy = running && (v.node.kind !== 'consumer' || this.consumerBusy(sim, v.node.id));
         if (busy) s.rotation.z += dt * 0.002 * (v.node.kind === 'topic' ? 0.6 : 2);
@@ -671,7 +670,7 @@ export class SceneView {
                     ? PAD.off
                     : PAD.idle;
           if (pad) (pad.material as MeshBasicMaterial).color.copy(color);
-          v.arms?.setPose(j, color === PAD.down ? 'down' : color === PAD.busy ? 'work' : color === PAD.polling ? 'poll' : color === PAD.off ? 'off' : 'idle');
+          v.workers?.setPose(j, color === PAD.down ? 'down' : color === PAD.busy ? 'work' : color === PAD.polling ? 'poll' : color === PAD.off ? 'off' : 'idle');
           v.station?.setLight(j, color);
           v.station?.setBusy(j, w.state === 'processing' || w.state === 'receiving' || w.state === 'starting');
         });
@@ -681,7 +680,7 @@ export class SceneView {
       } else if (isWorkerNode) {
         for (const pad of v.workerPads) (pad.material as MeshBasicMaterial).color.copy(v.node.kind === 'lambda' ? PAD.off : PAD.idle);
         (v.body.material as MeshBasicMaterial).color.copy(this.hex(v.baseColor));
-        v.workerPads.forEach((_, j) => v.arms?.setPose(j, 'idle'));
+        v.workerPads.forEach((_, j) => v.workers?.setPose(j, 'idle'));
         if (v.station) {
           // montando: as instâncias iniciais em pé, à espera
           const cap = lambdaCap((v.node as GraphNode<'lambda'>).config);
@@ -692,7 +691,7 @@ export class SceneView {
           v.station.update(Math.min(LAMBDA_START_CONCURRENCY, cap), dt, t);
         }
       }
-      v.arms?.update(dt, t);
+      v.workers?.update(dt, t);
     }
 
     this.updateSelection(t);
@@ -898,7 +897,7 @@ export class SceneView {
           }
           return;
         }
-        workerSlot(view.node, j, c.workers.length, this.tmp);
+        workerSlot(view.node, j, c.workers.length, this.tmp, this.kit.workerSpot);
         const current = w.batch[w.index];
         if (current) put(this.tmp, current.token, 1.05, now * 0.006);
         for (let k = w.index + 1; k < w.batch.length && k < w.index + 6; k++) {
@@ -932,10 +931,8 @@ export class SceneView {
     const at = (id: string) => this.nodeViews.get(id)?.group.position;
     switch (e.type) {
       case 'produced': {
-        // uma abertura por vez: com muitas mensagens o portão fica abrindo e fechando sem parar
-        const v = this.nodeViews.get(e.node);
-        const now = performance.now();
-        if (v?.door && now - v.doorAt >= DOOR_MS) v.doorAt = now;
+        // o tema decide o ritmo (o portão abre uma vez por vez, sem ficar abrindo sem parar)
+        this.nodeViews.get(e.node)?.send?.trigger(performance.now());
         break;
       }
       case 'processed':

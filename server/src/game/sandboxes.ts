@@ -1,6 +1,7 @@
 import { newId } from '../auth/tokens';
 import { HttpError } from '../errors';
 import type { SandboxRecord, SandboxRepo, SandboxSummary } from '../repos';
+import { isVisualTheme } from '../../../src/game/visual-themes';
 
 export const SANDBOX_LIMITS = {
   /** Sandboxes por conta. */
@@ -28,7 +29,7 @@ const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
  * (que conexão é válida, que configuração faz sentido) ficam no cliente, que já as aplica ao montar;
  * o servidor garante forma, tamanho e referências, para não guardar lixo nem documentos enormes.
  */
-export function parseGraph(raw: unknown): { graph: { nodes: unknown[]; edges: unknown[] }; nodeCount: number; json: string } {
+export function parseGraph(raw: unknown): { graph: { nodes: unknown[]; edges: unknown[]; theme?: string }; nodeCount: number; json: string } {
   if (!isObject(raw) || !Array.isArray(raw.nodes) || !Array.isArray(raw.edges)) throw invalid('O grafo precisa ter peças e conexões.');
   if (raw.nodes.length > SANDBOX_LIMITS.nodes) throw invalid(`No máximo ${SANDBOX_LIMITS.nodes} peças por sandbox.`);
   if (raw.edges.length > SANDBOX_LIMITS.edges) throw invalid(`No máximo ${SANDBOX_LIMITS.edges} conexões por sandbox.`);
@@ -59,7 +60,10 @@ export function parseGraph(raw: unknown): { graph: { nodes: unknown[]; edges: un
     return { id, from, to, ...(locked === true ? { locked } : {}), ...(filterPolicy !== undefined ? { filterPolicy } : {}), ...(dlq !== undefined ? { dlq } : {}) };
   });
 
-  const graph = { nodes, edges };
+  // tema visual escolhido no Sandbox (opcional; só os temas que o jogo conhece)
+  const { theme } = raw;
+  if (theme !== undefined && !isVisualTheme(theme)) throw invalid('Tema desconhecido.');
+  const graph = { nodes, edges, ...(theme !== undefined ? { theme } : {}) };
   const json = JSON.stringify(graph);
   if (Buffer.byteLength(json) > SANDBOX_LIMITS.graphBytes) throw invalid('Sandbox grande demais para salvar.');
   return { graph, nodeCount: nodes.length, json };

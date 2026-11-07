@@ -17,6 +17,10 @@ const MODELS = {
   fila: ['moldura', 'base', 'detalhe', 'rolos', 'guias', 'alerta'],
   produtor: ['corpo', 'telhado', 'detalhe', 'doca', 'janelas', 'portao', 'palete', 'caixas'],
   lambda: ['deck', 'hub', 'hub_detalhe', 'baia', 'trava', 'luz', 'robo_corpo', 'robo_faixa', 'robo_detalhe'],
+  // tema fazenda (src/render/themes/fazenda.ts)
+  robo: ['corpo', 'visor', 'olhos', 'chapeu', 'bracos'],
+  fazenda_produtor: ['chao', 'celeiro', 'telhado', 'portao', 'detalhe', 'silo', 'terra', 'verde', 'esteira', 'caixas'],
+  fazenda_feira: ['praca', 'detalhe', 'balcao', 'toldo_a', 'toldo_b', 'poste', 'luz'],
 };
 
 const tmp = mkdtempSync(join(tmpdir(), 'kiue-models-'));

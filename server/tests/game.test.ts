@@ -143,6 +143,8 @@ describe('sandboxes salvos', () => {
       { name: 'ok', graph: { nodes: [{ ...producer('p1'), x: Infinity }], edges: [] } },
       { name: 'ok', graph: { nodes: [producer('p1')], edges: [{ id: 'e1', from: 'p1', to: 'fantasma' }] } },
       { name: 'ok', graph: { nodes: Array.from({ length: SANDBOX_LIMITS.nodes + 1 }, (_, i) => queue(`q${i}`)), edges: [] } },
+      { name: 'ok', graph: { ...GRAPH, theme: 'castelo' } },
+      { name: 'ok', graph: { ...GRAPH, theme: 3 } },
     ];
     for (const body of bad) {
       const r = await b.post('/sandboxes', body);
@@ -151,6 +153,14 @@ describe('sandboxes salvos', () => {
     const extra = { nodes: [{ ...producer('p1'), hack: '<script>' }], edges: [], outro: 1 };
     const r = await b.post('/sandboxes', { name: 'limpo', graph: extra });
     expect(r.json.sandbox.graph).toEqual({ nodes: [producer('p1')], edges: [] });
+  });
+
+  it('guarda o tema visual escolhido no Sandbox', async () => {
+    const s = setup();
+    const b = await signedIn(s);
+    const r = await b.post('/sandboxes', { name: 'fazendinha', graph: { ...GRAPH, theme: 'fazenda' } });
+    expect(r.status).toBe(201);
+    expect(r.json.sandbox.graph.theme).toBe('fazenda');
   });
 
   it('aceita o grafo de um sandbox cheio, mas recusa documentos enormes', async () => {

@@ -10,6 +10,8 @@ import type { Level, PaletteItem } from './level-types';
 import { CATALOG, metaById, nextMeta, type LevelMeta } from './level-catalog';
 import { FREE_LEVELS, sandbox } from './levels';
 import { createSimulation, solutionGraph } from './run';
+import { sandboxThemePref, saveSandboxThemePref } from './sandbox-theme';
+import { DEFAULT_THEME, type VisualTheme } from './visual-themes';
 import { loadProgress, localProgress, type LevelProgress, type Progress, type ProgressSink } from './save';
 import { StudyState, type StudyTab } from '../study/state';
 
@@ -127,6 +129,25 @@ export class Controller {
 
   notify(): void {
     for (const l of this.listeners) l();
+  }
+
+  /** Tema visual da cena: o da fase, ou o escolhido no Sandbox. */
+  get visualTheme(): VisualTheme {
+    if (this.level?.track === 'sandbox') return this.graph.theme ?? DEFAULT_THEME;
+    // do catálogo (vale também para fase fechada que veio do cache, antes de o campo existir)
+    return (this.level && metaById(this.level.id)?.theme) ?? this.level?.theme ?? DEFAULT_THEME;
+  }
+
+  /** Último tema usado no Sandbox nesta sessão (reiniciar não volta para o padrão). */
+  private sandboxTheme: VisualTheme | null = null;
+
+  /** Troca o tema do Sandbox: vale para a montagem (e é salvo com ela) e vira o padrão deste navegador. */
+  setSandboxTheme(theme: VisualTheme): void {
+    if (this.level?.track !== 'sandbox' || this.graph.theme === theme) return;
+    this.graph = { ...this.graph, theme };
+    this.sandboxTheme = theme;
+    saveSandboxThemePref(theme);
+    this.graphChanged();
   }
 
   private graphChanged(): void {
@@ -315,6 +336,8 @@ export class Controller {
   resetGraph(): void {
     if (!this.level) return;
     this.graph = structuredClone(this.level.graph);
+    // sandbox novo (ou reiniciado) começa no último tema escolhido; reiniciar mantém o tema da mesa
+    if (this.level.track === 'sandbox') this.graph.theme = this.sandboxTheme ?? sandboxThemePref();
     this.toBuild();
     this.selection = null;
     this.graphChanged();
@@ -621,6 +644,7 @@ export class Controller {
     if (this.level?.track !== 'sandbox') return;
     this.graph = structuredClone(graph);
     this.sandboxRef = ref;
+    if (graph.theme) this.sandboxTheme = graph.theme;
     this.graphChanged();
     this.savedGraphVersion = this.graphVersion;
   }

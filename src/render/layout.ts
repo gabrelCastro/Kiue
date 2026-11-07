@@ -91,12 +91,15 @@ export function workerCell(j: number, count: number): { x: number; z: number } {
   return { x: ((j % 3) - (perRow - 1) / 2) * CELL, z: (Math.floor(j / 3) - (rows - 1) / 2) * CELL };
 }
 
-/** Posição da mensagem em processamento: pousada no tapete da célula do worker. */
-export function workerSlot(n: GraphNode, j: number, count: number, out: Vector3): void {
+/**
+ * Posição da mensagem em processamento: pousada no lugar do worker. `spot` vem do tema (no tapete
+ * da bancada, no balcão da barraca…), relativo ao centro da célula e antes do NODE_SCALE.
+ */
+export function workerSlot(n: GraphNode, j: number, count: number, out: Vector3, spot: { x: number; y: number; z: number }): void {
   const c = workerCell(j, count);
   out.set(
-    n.x + (c.x + BOX_SPOT) * NODE_SCALE,
-    (LIFT + BENCH_TOP + 0.01) * NODE_SCALE + (TOKEN_H * 1.05) / 2,
-    n.z + (c.z + BOX_SPOT) * NODE_SCALE,
+    n.x + (c.x + spot.x) * NODE_SCALE,
+    (LIFT + spot.y) * NODE_SCALE + (TOKEN_H * 1.05) / 2,
+    n.z + (c.z + spot.z) * NODE_SCALE,
   );
 }

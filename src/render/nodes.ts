@@ -1,7 +1,6 @@
 import {
   BoxGeometry,
   CanvasTexture,
-  Color,
   CylinderGeometry,
   Group,
   IcosahedronGeometry,
@@ -11,17 +10,18 @@ import {
   TorusGeometry,
   type Object3D,
 } from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { LAMBDA_START_CONCURRENCY, lambdaCap } from '../sim/engine';
 import type { GraphNode } from '../sim/types';
 import { bakedMaterial, bakeTree } from './bake';
-import { modelGeometry, modelGeometryAt } from './models';
-import { beltTexture, contactShadowTexture } from './textures';
-import { BENCH_TOP, LAMBDA_DECK_H, LIFT, NODE_SCALE, QUEUE_DEPTH, QUEUE_HEIGHT, QUEUE_LEN, TOKEN_H, workerCell } from './layout';
-import { ArmRig } from './robots';
+import { modelGeometry } from './models';
+import { beltTexture } from './textures';
+import { LAMBDA_DECK_H, LIFT, NODE_SCALE, QUEUE_DEPTH, QUEUE_HEIGHT, QUEUE_LEN } from './layout';
+import { contactShadow, mat, part, pedestal, shade } from './pieces';
+import type { SendFx, ThemeKit, WorkerRig } from './themes';
+import { industria } from './themes/industria';
 import { LambdaStation } from './station';
-import { SCENE, SERVICE, WORKER } from '../theme';
+import { SCENE, SERVICE } from '../theme';
 
 /** Cor de cada serviço (src/theme.ts; as mesmas variáveis --producer, --sns... de styles.css). */
 export const NODE_COLORS = SERVICE;
@@ -41,19 +41,6 @@ function lambdaGlyph(): CanvasTexture {
   return lambdaTexture;
 }
 
-/** Uma parte modelada no OpenSCAD, apoiada no pedestal. */
-function part(name: string, material: MeshBasicMaterial): Mesh {
-  const m = new Mesh(modelGeometry(name), material);
-  m.position.y = LIFT;
-  return m;
-}
-
-// Pontos tirados dos .scad: (x, z, −y) / 100, acima do pedestal e antes do NODE_SCALE.
-/** Topo do portão de enrolar do produtor (W/2 − DOOR_IN + 1,3; 0; DOOR_Z1). */
-const DOOR_AT = { x: 0.533, y: 0.44, z: 0 };
-/** Quanto o portão enrola (fração da altura) a cada mensagem enviada. */
-export const DOOR_OPEN = 0.85;
-
 export interface NodeView {
   node: GraphNode;
   group: Group;
@@ -63,61 +50,15 @@ export interface NodeView {
   workerPads: Mesh[];
   body: Mesh;
   baseColor: string;
-  /** Portão do produtor: enrola e desenrola a cada mensagem enviada. */
-  door?: Object3D;
-  /** Início (performance.now) da última abertura do portão. */
-  doorAt: number;
-  /** Braços robóticos do consumidor, um por worker. */
-  arms?: ArmRig;
+  /** Animação do produtor a cada mensagem enviada (portão, fazendeiro…), conforme o tema. */
+  send?: SendFx;
+  /** Workers do consumidor (braços, vendedores…), conforme o tema. */
+  workers?: WorkerRig;
   /** Estação da Lambda: um robô por instância, que sobe quando ela escala. */
   station?: LambdaStation;
 }
 
-/**
- * Material das peças: luz assada nos vértices (ver bake.ts). `emissive` (janela acesa, LED) vira
- * cor pura, sem sombreado; os demais campos de material físico antigos são ignorados.
- */
-function mat(color: string, extra: { flatShading?: boolean; emissive?: string; emissiveIntensity?: number; roughness?: number; metalness?: number } = {}) {
-  if (extra.emissive) return new MeshBasicMaterial({ color });
-  return bakedMaterial(color, { flat: extra.flatShading });
-}
-
-function rounded(w: number, h: number, d: number, radius = 0.1) {
-  return new RoundedBoxGeometry(w, h, d, 3, Math.min(radius, w / 2, h / 2, d / 2));
-}
-
-/** Mistura a cor da peça com `toward` (por padrão, a base do modo: claro de dia, grafite à noite). */
-function shade(color: string, amount: number, toward = SCENE.base): string {
-  return `#${new Color(color).lerp(new Color(toward), amount).getHexString()}`;
-}
-
-/** Mancha de sombra suave sob a peça: assenta o modelo no chão sem custo de luz. */
-function contactShadow(group: Group, w: number, d: number): void {
-  const blob = new Mesh(
-    new PlaneGeometry(w * 1.6, d * 1.6),
-    new MeshBasicMaterial({ map: contactShadowTexture(), transparent: true, depthWrite: false }),
-  );
-  blob.rotation.x = -Math.PI / 2;
-  // deslocada para longe da luz (que vem da esquerda e da frente): faz o papel da sombra projetada
-  blob.position.set(w * 0.16, 0.004, -d * 0.12);
-  blob.renderOrder = -1;
-  group.add(blob);
-}
-
-/**
- * Base de "peça de tabuleiro": uma placa clara na cor do serviço, com um filete mais forte em
- * volta. Dá unidade visual entre as peças e destaca cada uma do chão, sem brilho.
- */
-function pedestal(group: Group, w: number, d: number, color: string): Mesh {
-  const glow = new Mesh(rounded(w + 0.08, 0.03, d + 0.08, 0.06), new MeshBasicMaterial({ color: shade(color, 0.35) }));
-  glow.position.y = 0.015;
-  const base = new Mesh(rounded(w, 0.14, d, 0.07), mat(shade(color, 0.86), { roughness: 0.8, metalness: 0 }));
-  base.position.y = 0.09;
-  group.add(glow, base);
-  return base;
-}
-
-export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
+export function buildNode(node: GraphNode, isDlq: boolean, kit: ThemeKit = industria): NodeView {
   const group = new Group();
   group.position.set(node.x, 0, node.z);
   // As peças são modeladas em escala 1 e ampliadas aqui; a fila é modelada direto no tamanho final.
@@ -128,8 +69,8 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
   const spinners: Object3D[] = [];
   const workerPads: Mesh[] = [];
   let body: Mesh;
-  let door: Object3D | undefined;
-  let arms: ArmRig | undefined;
+  let send: SendFx | undefined;
+  let workers: WorkerRig | undefined;
   let station: LambdaStation | undefined;
   let baseColor: string;
   let labelY: number;
@@ -137,26 +78,9 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
 
   switch (node.kind) {
     case 'producer': {
-      // doca de expedição (models/produtor.scad): o portão enrola a cada mensagem enviada
-      baseColor = SCENE.light;
-      contactShadow(model, 1.6, 1.5);
-      const base = pedestal(model, 1.6, 1.5, NODE_COLORS.producer);
-      body = part('produtor/corpo', mat(baseColor));
-      const roof = part('produtor/telhado', mat(NODE_COLORS.producer));
-      door = part('produtor/portao', mat(SCENE.metal));
-      door.position.set(DOOR_AT.x, lift + DOOR_AT.y, DOOR_AT.z);
-      model.add(
-        body,
-        roof,
-        door,
-        part('produtor/detalhe', mat(SCENE.ink)),
-        part('produtor/doca', mat(SCENE.dim)),
-        part('produtor/janelas', mat('#fff1c2', { emissive: '#ffd56b' })),
-        part('produtor/palete', mat('#9a7448')),
-        part('produtor/caixas', mat('#c8a165')),
-      );
-      pickables.push(body, roof, base);
-      labelY = 1.4;
+      const built = kit.producer(model);
+      ({ body, baseColor, labelY, send } = built);
+      pickables.push(...built.pickables);
       break;
     }
     case 'topic': {
@@ -209,29 +133,10 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
       break;
     }
     case 'consumer': {
-      // bancada de triagem (models/consumidor.scad): uma célula com braço robótico por worker
-      baseColor = NODE_COLORS.consumer;
-      contactShadow(model, 1.7, 1.6);
-      const base = pedestal(model, 1.7, 1.6, baseColor);
-      body = part('consumidor/corpo', mat(baseColor));
-      model.add(body, part('consumidor/detalhe', mat(SCENE.ink)), part('consumidor/tampo', mat(SCENE.white)));
-      const workers = Math.max(1, (node as GraphNode<'consumer'>).config.workers);
-      const cells = Array.from({ length: workers }, (_, j) => {
-        const c = workerCell(j, workers);
-        return { x: c.x, y: lift + BENCH_TOP, z: c.z };
-      });
-      // tapetes numa malha só; o anel de luz de cada worker é separado porque muda de cor
-      model.add(new Mesh(modelGeometryAt('consumidor/celula', cells), mat(SCENE.dark)));
-      for (const c of cells) {
-        const pad = new Mesh(modelGeometry('consumidor/luz'), mat(WORKER.idle));
-        pad.position.set(c.x, c.y, c.z);
-        model.add(pad);
-        workerPads.push(pad);
-      }
-      arms = new ArmRig(cells, { base: mat(SCENE.accent), arm: mat(SCENE.accent), fore: mat(SCENE.dark) }, TOKEN_H * 1.05 / NODE_SCALE);
-      model.add(...arms.meshes);
-      pickables.push(body, base);
-      labelY = 1.6;
+      const built = kit.consumer(model, node as GraphNode<'consumer'>);
+      ({ body, baseColor, labelY, workers } = built);
+      pickables.push(...built.pickables);
+      workerPads.push(...built.workerPads);
       break;
     }
     case 'lambda': {
@@ -269,5 +174,5 @@ export function buildNode(node: GraphNode, isDlq: boolean): NodeView {
   model.add(labelObj);
 
   bakeTree(group);
-  return { node, group, pickables, label, spinners, workerPads, body: body!, baseColor: baseColor!, door, doorAt: -Infinity, arms, station };
+  return { node, group, pickables, label, spinners, workerPads, body: body!, baseColor: baseColor!, send, workers, station };
 }

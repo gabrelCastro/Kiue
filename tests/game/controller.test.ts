@@ -330,3 +330,54 @@ describe('Controller', () => {
     });
   });
 });
+
+describe('tema visual', () => {
+  beforeEach(() => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('fase sem tema no catálogo usa Indústria', () => {
+    expect(open('i01').visualTheme).toBe('industria');
+  });
+
+  it('fase com tema no catálogo usa o tema dela', () => {
+    expect(open('i03').visualTheme).toBe('fazenda');
+    expect(open('i10').visualTheme).toBe('fazenda');
+  });
+
+  it('no Sandbox o jogador escolhe: vai no grafo (salvo junto), marca alteração e vira o padrão do navegador', () => {
+    const c = open('sandbox');
+    expect(c.visualTheme).toBe('industria');
+    const before = c.graphVersion;
+    c.setSandboxTheme('fazenda');
+    expect(c.visualTheme).toBe('fazenda');
+    expect(c.graph.theme).toBe('fazenda');
+    expect(c.graphVersion).toBeGreaterThan(before);
+    expect(c.sandboxDirty).toBe(true);
+    // reiniciar mantém o tema; um sandbox novo (outro controller) começa nele
+    c.resetGraph();
+    expect(c.visualTheme).toBe('fazenda');
+    expect(open('sandbox').visualTheme).toBe('fazenda');
+  });
+
+  it('fora do Sandbox não troca o tema', () => {
+    const c = open('i01');
+    c.setSandboxTheme('fazenda');
+    expect(c.visualTheme).toBe('industria');
+    expect(c.graph.theme).toBeUndefined();
+  });
+
+  it('abrir um sandbox salvo usa o tema dele (e os antigos, sem tema, abrem em Indústria)', () => {
+    const c = open('sandbox');
+    c.openSavedSandbox({ id: 's1', name: 'Fazendinha', revision: 1 }, { ...structuredClone(c.graph), theme: 'fazenda' });
+    expect(c.visualTheme).toBe('fazenda');
+    c.openSavedSandbox({ id: 's2', name: 'Antigo', revision: 1 }, { nodes: [], edges: [] });
+    expect(c.visualTheme).toBe('industria');
+  });
+});

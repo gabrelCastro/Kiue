@@ -7,6 +7,7 @@ import type { GoalResult } from '../game/goals';
 import type { GraphNode } from '../sim/types';
 import { auth } from '../auth/store';
 import { AccountButton } from './auth/AccountButton';
+import { SandboxTheme } from './SandboxTheme';
 import { ThemeButton } from './ThemeButton';
 import { useTheme } from './theme-mode';
 import { loadScene } from './scene-loader';
@@ -41,6 +42,7 @@ export function LevelScreen() {
     <div class="level-screen">
       <TopBar />
       <aside class="left">
+        {level.track === 'sandbox' && <SandboxTheme />}
         {level.track === 'sandbox' && <SandboxFile />}
         {level.palette.length > 0 && <Palette />}
         {level.goals.length > 0 && <Goals />}
@@ -675,6 +677,7 @@ function Sheet() {
         <div class="sheet-body">
           {tab === 'montar' && (
             <>
+              {level.track === 'sandbox' && <SandboxTheme />}
               {level.track === 'sandbox' && <SandboxFile />}
               <Palette />
             </>

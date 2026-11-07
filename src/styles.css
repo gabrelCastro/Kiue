@@ -1616,6 +1616,15 @@ details p {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+/* Tema do sandbox: o seletor ocupa a largura do painel */
+.sandbox-theme .segmented {
+  display: flex;
+}
+.sandbox-theme .segmented button {
+  flex: 1;
+  padding: 6px 8px;
+}
+
 .sandbox-file-form {
   display: flex;
   flex-direction: column;

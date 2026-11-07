@@ -1,3 +1,4 @@
+import type { VisualTheme } from './visual-themes';
 import type { Track } from './level-types';
 
 /** O que o menu precisa saber de cada fase. É público: o conteúdo das fases fechadas vem da API. */
@@ -7,20 +8,24 @@ export interface LevelMeta {
   index: number;
   title: string;
   concept: string;
+  /** Tema visual da fase (sem tema: o visual de hoje, Indústria). */
+  theme?: VisualTheme;
 }
 
 /** Todas as fases das trilhas, na ordem de jogo. */
 export const CATALOG: readonly LevelMeta[] = [
   { id: 'i01', track: 'iniciante', index: 1, title: 'Primeiro pedido', concept: 'Fila de mensagens' },
   { id: 'i02', track: 'iniciante', index: 2, title: 'Black Friday', concept: 'Fila como buffer' },
-  { id: 'i03', track: 'iniciante', index: 3, title: 'A fila não para de crescer', concept: 'Consumidores concorrentes' },
+  // tema Fazenda: mais workers = mais barracas com vendedor (consumidores concorrentes à vista)
+  { id: 'i03', track: 'iniciante', index: 3, title: 'A fila não para de crescer', concept: 'Consumidores concorrentes', theme: 'fazenda' },
   { id: 'i04', track: 'iniciante', index: 4, title: 'Muitos interessados', concept: 'Fan-out com tópico' },
   { id: 'i05', track: 'iniciante', index: 5, title: 'Só o que importa', concept: 'Filter policy' },
   { id: 'i06', track: 'iniciante', index: 6, title: 'Mensagem venenosa', concept: 'DLQ e máximo de recebimentos' },
   { id: 'i07', track: 'iniciante', index: 7, title: 'Timeout curto demais', concept: 'Visibility timeout' },
   { id: 'i08', track: 'iniciante', index: 8, title: 'Cobrança duplicada', concept: 'At-least-once e idempotência' },
   { id: 'i09', track: 'iniciante', index: 9, title: 'Em ordem, por favor', concept: 'Fila FIFO' },
-  { id: 'i10', track: 'iniciante', index: 10, title: 'A conta chegou', concept: 'Long polling e custo' },
+  // tema Fazenda: vendedores virados para a fila, esperando, mostram o "buscar mensagens" (long polling)
+  { id: 'i10', track: 'iniciante', index: 10, title: 'A conta chegou', concept: 'Long polling e custo', theme: 'fazenda' },
   { id: 'c01', track: 'certificacao', index: 1, title: 'Fan-out em ordem', concept: 'Tópico FIFO → fila FIFO' },
   { id: 'c02', track: 'certificacao', index: 2, title: 'Janela de manutenção', concept: 'Retenção de mensagens' },
   { id: 'c03', track: 'certificacao', index: 3, title: 'Espere antes de processar', concept: 'Delay queue' },

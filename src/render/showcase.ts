@@ -5,7 +5,8 @@ import type { GraphNode } from '../sim/types';
 import { bakedMaterial, bakeGeometry, bakeTree } from './bake';
 import { Effects } from './effects';
 import { edgeCurve, queueSlot, TOKEN_H, workerSlot } from './layout';
-import { buildNode, DOOR_OPEN, type NodeView } from './nodes';
+import { buildNode, type NodeView } from './nodes';
+import { industria } from './themes/industria';
 import { backdropTexture, beltTexture, flowTexture, GROUND_TILE, groundTexture } from './textures';
 import { SCENE, WORKER } from '../theme';
 
@@ -27,7 +28,6 @@ const BURST = 10;
 const BURST_GAP = 0.26;
 const BURST_PAUSE = 8;
 const QUEUE_CAP = 14;
-const DOOR_MS = 420;
 const MAX_TOKENS = 64;
 
 /** Cores dos pads (atualizadas a cada montagem: dependem do modo claro/noturno). */
@@ -170,7 +170,7 @@ export function mountShowcase(container: HTMLElement, opts: ShowcaseOptions): ()
   function emit(t: number) {
     const color = palette[colorIndex++ % palette.length];
     msgs.push({ color, phase: 'out', t0: t, pos: new Vector3(), worker: -1, spin: 0, scale: 1 });
-    views.p.doorAt = performance.now();
+    views.p.send?.trigger(performance.now());
     sent++;
   }
 
@@ -223,7 +223,7 @@ export function mountShowcase(container: HTMLElement, opts: ShowcaseOptions): ()
           break;
         }
         case 'in': {
-          workerSlot(consumer, m.worker, 3, tmp2);
+          workerSlot(consumer, m.worker, 3, tmp2, industria.workerSpot);
           if (p >= T_IN) {
             m.phase = 'work';
             m.t0 = t;
@@ -261,7 +261,7 @@ export function mountShowcase(container: HTMLElement, opts: ShowcaseOptions): ()
     }
 
     // braços e luzes
-    const arms = views.c.arms;
+    const arms = views.c.workers;
     workers.forEach((w, j) => {
       const pad = views.c.workerPads[j];
       const color = w.state === 'busy' ? PAD.busy : w.state === 'poll' ? PAD.polling : PAD.idle;
@@ -272,10 +272,7 @@ export function mountShowcase(container: HTMLElement, opts: ShowcaseOptions): ()
     arms?.update(dt * 1000, t);
 
     // portão do produtor
-    if (views.p.door) {
-      const q = (performance.now() - views.p.doorAt) / DOOR_MS;
-      views.p.door.scale.y = 1 - (q < 1 ? DOOR_OPEN * Math.sin(Math.PI * q) : 0);
-    }
+    views.p.send?.update(performance.now());
 
     // esteira e setas dos canos andam
     beltTexture().offset.x -= dt * 0.9;
