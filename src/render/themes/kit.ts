@@ -1,10 +1,11 @@
-import type { Group, Mesh, Object3D } from 'three';
+import type { Color, Group, Mesh, Object3D, Vector3 } from 'three';
+import type { WorkerState } from '../../sim/engine';
 import type { GraphNode } from '../../sim/types';
 import type { ArmPose } from '../robots';
 
 /*
- * Kit de um tema visual: como montar o produtor e o consumidor. O resto da cena (fila, tópico,
- * função sob demanda, canos, mensagens) é igual em todos os temas, assim como as cores de cada
+ * Kit de um tema visual: como montar o produtor, o consumidor e a função sob demanda. O resto da
+ * cena (fila, tópico, canos, mensagens) é igual em todos os temas, assim como as cores de cada
  * serviço. Os kits montam dentro de `model`, que já vem ampliado pelo NODE_SCALE.
  */
 
@@ -44,9 +45,31 @@ export interface ConsumerBuild extends PieceBuild {
   workers?: WorkerRig;
 }
 
+/**
+ * Os ajudantes da função sob demanda (render/themes/yard.ts): um por instância, seguindo o estado
+ * de cada worker da simulação.
+ */
+export interface LambdaRig {
+  readonly objects: Object3D[];
+  /** Onde os eventos da fila interna (SNS → função) esperam, no espaço do modelo. */
+  readonly source: Vector3;
+  setWorker(j: number, state: WorkerState, warm: boolean, light: Color): void;
+  /** `dt` em ms (0 = direto para o lugar), `t` em s, `pace` = ritmo da caminhada. */
+  update(active: number, dt: number, t: number, pace?: number): void;
+  /** Onde o lote do worker `j` aparece, no espaço do modelo (antes do NODE_SCALE). */
+  itemSpot(j: number, out: Vector3): void;
+  moving(): boolean;
+}
+
+export interface LambdaBuild extends PieceBuild {
+  rig: LambdaRig;
+}
+
 export interface ThemeKit {
   producer(model: Group): ProducerBuild;
   consumer(model: Group, node: GraphNode<'consumer'>): ConsumerBuild;
+  /** Função sob demanda do tema (pátio com ajudantes). A da Indústria é baixada à parte (loadKit). */
+  lambda?(model: Group, node: GraphNode<'lambda'>): LambdaBuild;
   /**
    * Onde a caixa em processamento pousa, relativo ao centro da célula do worker (layout.workerCell),
    * antes do NODE_SCALE; `y` é a altura da superfície acima do pedestal.

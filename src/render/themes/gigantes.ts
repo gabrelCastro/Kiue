@@ -6,7 +6,9 @@ import { modelGeometryAt, registerModels } from '../models';
 import { contactShadow, mat, part, pedestal, shade } from '../pieces';
 import { SCENE, SERVICE } from '../../theme';
 import { CARDBOARD, consumerBase, crateInArms, EYES, FOLLOW, LiftFx, lit, PRACA_H, robot, robotMaterials, statusLights } from './common';
-import type { ConsumerBuild, ProducerBuild, ThemeKit, WorkerPose, WorkerRig } from './kit';
+import type { ConsumerBuild, LambdaBuild, ProducerBuild, ThemeKit, WorkerPose, WorkerRig } from './kit';
+import { buildYard } from './funcao';
+
 
 /*
  * Tema Robôs gigantes. Produtor = robô-canhão (models/gigantes_produtor.scad): o cano recua a cada
@@ -175,6 +177,35 @@ export const gigantes: ThemeKit = {
     model.add(...arms.meshes);
     return { body, baseColor, pickables: [body, base], labelY: 1.15, workerPads, workers: arms };
   },
+  lambda(model, node: GraphNode<'lambda'>): LambdaBuild {
+    // mecânicos do pórtico (models/gigantes_funcao.scad): descem no gancho e soldam as chapas
+    const color = SERVICE.lambda;
+    return buildYard(
+      model,
+      node,
+      'gigantes_funcao',
+      [
+        { name: 'piso', mat: mat(SCENE.dark) },
+        { name: 'faixas', mat: mat(SCENE.accent) },
+        { name: 'metal', mat: mat(SCENE.metal) },
+        { name: 'chapas', mat: mat(SCENE.light) },
+        { name: 'carrinhos', mat: mat(color) },
+        { name: 'detalhe', mat: mat(SCENE.ink) },
+        { name: 'berco', mat: mat(SCENE.metal), at: 'all' },
+        { name: 'garras', mat: mat(SCENE.ink), at: 'all' },
+        { name: 'cones', mat: mat(SCENE.accent), at: 'locked' },
+      ],
+      {
+        arrival: 'crane',
+        crane: { hookZ: 40, mat: mat(SCENE.ink) },
+        hat: { name: 'gigantes_funcao/mascara', mat: mat(SCENE.ink) },
+        work: { kind: 'sparks', mat: lit('#fff3a8') },
+        stationTop: 14.6,
+        source: [-86, 34, 8.7],
+      },
+    );
+  },
+
 
   // a caixa pousa no tapete, no centro da célula
   workerSpot: { x: 0, y: PRACA_H + 0.018, z: 0 },

@@ -1,6 +1,5 @@
 import {
   BoxGeometry,
-  CanvasTexture,
   CylinderGeometry,
   Group,
   IcosahedronGeometry,
@@ -15,32 +14,15 @@ import { LAMBDA_START_CONCURRENCY, lambdaCap } from '../sim/engine';
 import type { GraphNode } from '../sim/types';
 import { bakedMaterial, bakeTree } from './bake';
 import { mergeStatic } from './merge';
-import { modelGeometry } from './models';
 import { beltTexture } from './textures';
-import { LAMBDA_DECK_H, LIFT, NODE_SCALE, QUEUE_DEPTH, QUEUE_HEIGHT, QUEUE_LEN } from './layout';
+import { LIFT, NODE_SCALE, QUEUE_DEPTH, QUEUE_HEIGHT, QUEUE_LEN } from './layout';
 import { contactShadow, mat, matLive, part, pedestal, shade } from './pieces';
-import type { SendFx, ThemeKit, WorkerRig } from './themes';
+import type { LambdaRig, SendFx, ThemeKit, WorkerRig } from './themes';
 import { industria } from './themes/industria';
-import { LambdaStation } from './station';
 import { SCENE, SERVICE } from '../theme';
 
 /** Cor de cada serviço (src/theme.ts; as mesmas variáveis --producer, --sns... de styles.css). */
 export const NODE_COLORS = SERVICE;
-
-let lambdaTexture: CanvasTexture | null = null;
-function lambdaGlyph(): CanvasTexture {
-  if (lambdaTexture) return lambdaTexture;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 128;
-  const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 104px serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('λ', 64, 70);
-  lambdaTexture = new CanvasTexture(canvas);
-  return lambdaTexture;
-}
 
 export interface NodeView {
   node: GraphNode;
@@ -57,8 +39,8 @@ export interface NodeView {
   send?: SendFx;
   /** Workers do consumidor (braços, vendedores…), conforme o tema. */
   workers?: WorkerRig;
-  /** Estação da Lambda: um robô por instância, que sobe quando ela escala. */
-  station?: LambdaStation;
+  /** Função sob demanda do tema: um ajudante por instância (render/themes/yard.ts). */
+  rig?: LambdaRig;
 }
 
 export function buildNode(node: GraphNode, isDlq: boolean, kit: ThemeKit = industria): NodeView {
@@ -74,7 +56,7 @@ export function buildNode(node: GraphNode, isDlq: boolean, kit: ThemeKit = indus
   let body: Mesh;
   let send: SendFx | undefined;
   let workers: WorkerRig | undefined;
-  let station: LambdaStation | undefined;
+  let rig: LambdaRig | undefined;
   let baseColor: string;
   let labelY: number;
   const lift = LIFT;
@@ -143,26 +125,22 @@ export function buildNode(node: GraphNode, isDlq: boolean, kit: ThemeKit = indus
       break;
     }
     case 'lambda': {
-      // estação de robôs sob demanda (models/lambda.scad, render/station.ts)
+      // pátio do tema (render/themes/yard.ts): um ajudante por instância. A cena só monta com o
+      // kit completo (kitFor com função); sem ele, uma base simples no lugar.
+      if (kit.lambda) {
+        const built = kit.lambda(model, node as GraphNode<'lambda'>);
+        ({ body, baseColor, labelY, rig } = built);
+        pickables.push(...built.pickables);
+        rig.update(Math.min(LAMBDA_START_CONCURRENCY, lambdaCap((node as GraphNode<'lambda'>).config)), 0, 0);
+        break;
+      }
       baseColor = NODE_COLORS.lambda;
-      contactShadow(model, 2.0, 2.0);
-      const deck = new Mesh(modelGeometry('lambda/deck'), mat(SCENE.light));
-      body = new Mesh(modelGeometry('lambda/hub'), matLive(baseColor, { flatShading: true }));
-      const glyph = new Mesh(new PlaneGeometry(0.66, 0.66), new MeshBasicMaterial({ map: lambdaGlyph(), transparent: true, depthWrite: false }));
-      glyph.rotation.x = -Math.PI / 2;
-      glyph.position.y = LAMBDA_DECK_H + 0.4 + 0.004;
-      station = new LambdaStation(lambdaCap((node as GraphNode<'lambda'>).config), {
-        bay: mat(SCENE.dark),
-        lock: mat(SCENE.metal),
-        light: bakedMaterial('#ffffff'),
-        body: mat(SCENE.white),
-        stripe: mat(baseColor),
-        detail: mat(SCENE.ink),
-      });
-      station.update(LAMBDA_START_CONCURRENCY, 0, 0);
-      model.add(deck, body, new Mesh(modelGeometry('lambda/hub_detalhe'), mat(SCENE.ink)), glyph, ...station.objects);
-      pickables.push(body, deck);
-      labelY = 1.0;
+      contactShadow(model, 2.4, 1.9);
+      body = new Mesh(new BoxGeometry(2.3, 0.08, 1.75), matLive(baseColor));
+      body.position.y = 0.04;
+      model.add(body);
+      pickables.push(body);
+      labelY = 0.75;
       break;
     }
   }
@@ -181,5 +159,5 @@ export function buildNode(node: GraphNode, isDlq: boolean, kit: ThemeKit = indus
   // (o corpo do consumidor e da função muda de cor, mas tem material próprio e já fica de fora)
   mergeStatic(group, new Set<Object3D>([...spinners, ...workerPads]), pickables);
   for (const p of pickables) p.userData.nodeId = node.id;
-  return { node, group, pickables, label, spinners, workerPads, body: body!, baseColor: baseColor!, send, workers, station };
+  return { node, group, pickables, label, spinners, workerPads, body: body!, baseColor: baseColor!, send, workers, rig };
 }

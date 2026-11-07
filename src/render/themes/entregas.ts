@@ -6,7 +6,9 @@ import { modelGeometry, modelGeometryAt, registerModels } from '../models';
 import { contactShadow, mat, part, pedestal, shade } from '../pieces';
 import { SCENE, SERVICE } from '../../theme';
 import { approach, CARDBOARD, consumerBase, crateInArms, EYES, FOLLOW, liftArmsFx, LIT, lit, PRACA_H, robot, robotMaterials, statusLights } from './common';
-import type { ConsumerBuild, ProducerBuild, ThemeKit, WorkerPose, WorkerRig } from './kit';
+import type { ConsumerBuild, LambdaBuild, ProducerBuild, ThemeKit, WorkerPose, WorkerRig } from './kit';
+import { buildYard } from './funcao';
+
 
 /*
  * Tema Entregas. Produtor = caminhão de pedidos (models/entregas_produtor.scad), com um robô que
@@ -125,6 +127,48 @@ export const entregas: ThemeKit = {
     const rovers = new RoverRig(cells, { body: SCENE.white, bumper: baseColor });
     model.add(...rovers.meshes);
     return { body, baseColor, pickables: [body, base], labelY: 0.8, workerPads, workers: rovers };
+  },
+
+  lambda(model, node: GraphNode<'lambda'>): LambdaBuild {
+    // entregadores de aplicativo (models/entregas_funcao.scad): chegam de moto, pegam o pedido no
+    // balcão e guardam no baú
+    const color = SERVICE.lambda;
+    return buildYard(
+      model,
+      node,
+      'entregas_funcao',
+      [
+        { name: 'asfalto', mat: mat(SCENE.dark) },
+        { name: 'branco', mat: mat(SCENE.white) },
+        { name: 'corpo', mat: mat(color) },
+        { name: 'detalhe', mat: mat(SCENE.ink) },
+        { name: 'janela', mat: lit(LIT) },
+        { name: 'metal', mat: mat(SCENE.metal) },
+        { name: 'vaga_f', mat: mat(SCENE.white), at: 'front' },
+        { name: 'vaga_b', mat: mat(SCENE.white), at: 'back' },
+        { name: 'cones', mat: mat(SCENE.accent), at: 'locked' },
+      ],
+      {
+        arrival: 'vehicle',
+        vehicle: {
+          parts: [
+            { name: 'moto_branco', mat: mat(SCENE.white) },
+            { name: 'moto_bau', mat: mat(color) },
+            { name: 'moto_rodas', mat: mat(SCENE.ink) },
+            { name: 'moto_metal', mat: mat(SCENE.metal) },
+          ],
+          lamp: { name: 'moto_farol', mat: lit('#ffffff') },
+          park: 'station',
+          yawOffset: 0,
+          riderZ: 6,
+          riderScale: 0.9,
+        },
+        hat: { name: 'entregas_funcao/capacete', mat: mat(color) },
+        itemOnVehicle: 11,
+        stationTop: 27.7,
+        source: [-84, 33, 8.9],
+      },
+    );
   },
 
   // a caixa pousa na caçamba do carrinho (y = +6 mm no .scad, atrás da cabine; a 6 + 15 mm do pedestal)

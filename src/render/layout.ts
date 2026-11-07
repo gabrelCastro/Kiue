@@ -8,18 +8,12 @@ export const QUEUE_HEIGHT = 1.1;
 export const QUEUE_DEPTH = 1.0;
 /** Altura do pedestal: o conteúdo das peças começa acima dele. */
 export const LIFT = 0.16;
-/** Estação da Lambda (models/lambda.scad): alçapões num anel, livre ±20° em volta da entrada. */
-export const LAMBDA_BAYS = 20;
-const LAMBDA_RING = 0.88;
-const LAMBDA_GAP_DEG = 20;
-/** Topo da plataforma da Lambda (ela não tem pedestal: a plataforma é a base). */
-export const LAMBDA_DECK_H = 0.14;
-/** Topo da bandeja do robô acima do alçapão, onde o lote empilha. */
-const ROBOT_TRAY = 0.245;
 /** Altura de uma mensagem do lote empilhada na bandeja (escala do pacote). */
 export const LAMBDA_BATCH_SCALE = 0.4;
 export const PORT_Y = 0.6;
 const PORT_DX = 0.8 * NODE_SCALE;
+/** A função sob demanda (pátio, models/patio.scad) recebe o cano no bocal da ponta esquerda (x = −119 mm). */
+const LAMBDA_PORT_DX = 1.19 * NODE_SCALE;
 /** Quantas mensagens por camada e quantas camadas cabem dentro da fila. */
 export const QUEUE_COLS = 9;
 export const QUEUE_LAYERS = 4;
@@ -32,7 +26,7 @@ export function outPort(n: GraphNode): Vector3 {
 }
 
 export function inPort(n: GraphNode): Vector3 {
-  const dx = n.kind === 'queue' ? QUEUE_LEN / 2 : PORT_DX;
+  const dx = n.kind === 'queue' ? QUEUE_LEN / 2 : n.kind === 'lambda' ? LAMBDA_PORT_DX : PORT_DX;
   return new Vector3(n.x - dx, PORT_Y, n.z);
 }
 
@@ -61,20 +55,6 @@ export function queueSlot(n: GraphNode, i: number, out: Vector3): boolean {
   // os pacotes assentam na esteira e se empilham de verdade (sem vão entre as camadas)
   out.set(n.x + QUEUE_LEN / 2 - 0.3 - col * 0.36, LIFT + 0.065 + TOKEN_H / 2 + layer * (TOKEN_H + 0.02), n.z);
   return true;
-}
-
-/** Alçapão `j` da estação da Lambda, relativo à peça e antes do NODE_SCALE. `angle` gira o robô para fora. */
-export function lambdaBay(j: number): { x: number; z: number; angle: number } {
-  const deg = 180 + LAMBDA_GAP_DEG + (j * (360 - 2 * LAMBDA_GAP_DEG)) / (LAMBDA_BAYS - 1);
-  const a = (deg * Math.PI) / 180;
-  // (x, y) do .scad vira (x, −z) no jogo
-  return { x: Math.cos(a) * LAMBDA_RING, z: -Math.sin(a) * LAMBDA_RING, angle: a };
-}
-
-/** Base da pilha do lote de uma invocação: em cima da bandeja do robô do alçapão `j`. */
-export function lambdaSlot(n: GraphNode, j: number, _count: number, out: Vector3): void {
-  const b = lambdaBay(j);
-  out.set(n.x + b.x * NODE_SCALE, (LAMBDA_DECK_H + ROBOT_TRAY) * NODE_SCALE, n.z + b.z * NODE_SCALE);
 }
 
 /** Altura do tampo da bancada do consumidor acima do pedestal (antes do NODE_SCALE). */

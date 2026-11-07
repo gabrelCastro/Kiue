@@ -6,7 +6,9 @@ import { modelGeometryAt, registerModels } from '../models';
 import { contactShadow, mat, part, pedestal, shade } from '../pieces';
 import { SCENE, SERVICE } from '../../theme';
 import { CARDBOARD, consumerBase, liftArmsFx, PRACA_H, robot, robotMaterials, statusLights, VendorRig } from './common';
-import type { ConsumerBuild, ProducerBuild, ThemeKit } from './kit';
+import type { ConsumerBuild, LambdaBuild, ProducerBuild, ThemeKit } from './kit';
+import { buildYard } from './funcao';
+
 
 /*
  * Tema Correio. Produtor = bancada de empacotamento (models/correio_produtor.scad): um robô atrás
@@ -51,6 +53,31 @@ export const correio: ThemeKit = {
     const clerks = new VendorRig(cells, robotMaterials());
     model.add(...clerks.meshes);
     return { body, baseColor, pickables: [body, base], labelY: 0.9, workerPads, workers: clerks };
+  },
+
+  lambda(model, node: GraphNode<'lambda'>): LambdaBuild {
+    // guichês extras (models/correio_funcao.scad): atendentes que batem o ponto e carimbam cartas
+    const color = SERVICE.lambda;
+    return buildYard(
+      model,
+      node,
+      'correio_funcao',
+      [
+        { name: 'piso', mat: mat(SCENE.white) },
+        { name: 'tapete', mat: mat(shade(color, 0.62)) },
+        { name: 'corpo', mat: mat(color) },
+        { name: 'celula', mat: mat(SCENE.dark) },
+        { name: 'parede', mat: mat(shade(color, 0.45)) },
+        { name: 'detalhe', mat: mat(SCENE.ink) },
+        { name: 'metal', mat: mat(SCENE.metal) },
+        { name: 'mesa', mat: mat(color), at: 'all' },
+        { name: 'tampo', mat: mat(SCENE.white), at: 'all' },
+        { name: 'placa_f', mat: mat(SCENE.ink), at: 'front' },
+        { name: 'placa_b', mat: mat(SCENE.ink), at: 'back' },
+        { name: 'cones', mat: mat(SCENE.accent), at: 'locked' },
+      ],
+      { arrival: 'door', hat: { name: 'correio_funcao/bone', mat: mat(shade(color, 0.3, SCENE.ink)) }, stationTop: 20.6, source: [-92, 18, 26.8] },
+    );
   },
 
   // a caixa pousa na bandeja do balcão (y = −13 mm no .scad; tampo a 6 + 16 mm)

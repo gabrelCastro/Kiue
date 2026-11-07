@@ -16,7 +16,6 @@ const MODELS = {
   consumidor: ['corpo', 'detalhe', 'tampo', 'celula', 'luz', 'giro', 'superior', 'antebraco'],
   fila: ['moldura', 'base', 'detalhe', 'rolos', 'guias', 'alerta'],
   produtor: ['corpo', 'telhado', 'detalhe', 'doca', 'janelas', 'portao', 'palete', 'caixas'],
-  lambda: ['deck', 'hub', 'hub_detalhe', 'baia', 'trava', 'luz', 'robo_corpo', 'robo_faixa', 'robo_detalhe'],
   // temas (src/render/themes/*.ts): cada um vai para models.<tema>.gen.ts, baixado só com o tema;
   // o robozinho (models.robo.gen.ts) é comum aos temas que o usam
   robo: ['corpo', 'visor', 'olhos', 'chapeu', 'bracos'],
@@ -30,6 +29,12 @@ const MODELS = {
   fabrica_produtor: ['chao', 'paredes', 'telhado', 'janelas', 'rosto', 'metal', 'papelao', 'saida', 'fumaca'],
   fabrica_mesa: ['praca', 'detalhe', 'tampo', 'borda', 'pe', 'luz'],
   gigantes_produtor: ['chao', 'corpo', 'clara', 'rosto', 'olhos', 'cano', 'metal', 'papelao', 'saida', 'detalhe'],
+  fazenda_funcao: ['base', 'grama', 'terra', 'carroca', 'sino', 'metal', 'detalhe', 'fardo', 'cerca', 'aviso', 'luz', 'bike_metal', 'bike_rodas', 'bike_farol'],
+  correio_funcao: ['base', 'piso', 'tapete', 'corpo', 'celula', 'parede', 'detalhe', 'metal', 'mesa', 'tampo', 'placa_f', 'placa_b', 'cones', 'luz', 'bone'],
+  entregas_funcao: ['base', 'asfalto', 'branco', 'corpo', 'detalhe', 'janela', 'metal', 'vaga_f', 'vaga_b', 'cones', 'luz', 'moto_branco', 'moto_bau', 'moto_rodas', 'moto_metal', 'moto_farol', 'capacete'],
+  fabrica_funcao: ['base', 'piso', 'tapete', 'metal', 'corpo', 'celula', 'vidro', 'detalhe', 'pecas_a', 'pecas_b', 'pecas_c', 'bancada', 'pernas', 'cones', 'luz', 'helice'],
+  gigantes_funcao: ['base', 'piso', 'faixas', 'metal', 'chapas', 'carrinhos', 'detalhe', 'berco', 'garras', 'cones', 'luz', 'mascara'],
+  industria_funcao: ['base', 'piso', 'faixas', 'pocos', 'metal', 'prensa', 'colunas_f', 'colunas_b', 'travessa_f', 'travessa_b', 'cones', 'luz', 'pistao', 'capacete'],
   gigantes_polvo: ['praca', 'detalhe', 'poste', 'cabeca', 'rosto', 'olhos', 'tapete', 'luz'],
 };
 
@@ -76,6 +81,12 @@ const THEME_FILES = {
   robo: 'robo',
   fazenda_produtor: 'fazenda',
   fazenda_feira: 'fazenda',
+  fazenda_funcao: 'fazenda',
+  correio_funcao: 'correio',
+  entregas_funcao: 'entregas',
+  fabrica_funcao: 'fabrica',
+  gigantes_funcao: 'gigantes',
+  industria_funcao: 'industria',
   correio_produtor: 'correio',
   correio_guiche: 'correio',
   entregas_produtor: 'entregas',

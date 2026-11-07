@@ -5,8 +5,9 @@ import { THEME_MODEL_DATA } from '../models.fazenda.gen';
 import { modelGeometryAt, registerModels } from '../models';
 import { contactShadow, mat, part, pedestal, shade } from '../pieces';
 import { SCENE, SERVICE } from '../../theme';
-import { CARDBOARD, consumerBase, crateInArms, liftArmsFx, PRACA_H, robot, robotMaterials, statusLights, VendorRig } from './common';
-import type { ConsumerBuild, ProducerBuild, ThemeKit } from './kit';
+import { CARDBOARD, consumerBase, crateInArms, lit, liftArmsFx, PRACA_H, robot, robotMaterials, statusLights, VendorRig } from './common';
+import type { ConsumerBuild, LambdaBuild, ProducerBuild, ThemeKit } from './kit';
+import { buildYard } from './funcao';
 
 /*
  * Tema Fazenda. Produtor = horta com celeiro (models/fazenda_produtor.scad) e um robô fazendeiro
@@ -20,6 +21,8 @@ registerModels(THEME_MODEL_DATA);
 const WOOD = '#b0864f';
 const SOIL = '#9a7448';
 const LEAF = '#3f9a52';
+const GRASS = '#a5d68f';
+const STRAW = '#e2c46a';
 
 export const fazenda: ThemeKit = {
   producer(model): ProducerBuild {
@@ -64,6 +67,43 @@ export const fazenda: ThemeKit = {
     const vendors = new VendorRig(cells, robotMaterials(), { hat: true });
     model.add(...vendors.meshes);
     return { body, baseColor, pickables: [body, base], labelY: 1.0, workerPads, workers: vendors };
+  },
+
+  lambda(model, node: GraphNode<'lambda'>): LambdaBuild {
+    // mutirão (models/fazenda_funcao.scad): vizinhos de bicicleta trabalhando nos fardos
+    return buildYard(
+      model,
+      node,
+      'fazenda_funcao',
+      [
+        { name: 'grama', mat: mat(GRASS) },
+        { name: 'terra', mat: mat(SOIL) },
+        { name: 'carroca', mat: mat(WOOD) },
+        { name: 'sino', mat: mat(SERVICE.lambda) },
+        { name: 'metal', mat: mat(SCENE.metal) },
+        { name: 'detalhe', mat: mat(SCENE.ink) },
+        { name: 'fardo', mat: mat(STRAW), at: 'all' },
+        { name: 'cerca', mat: mat(WOOD), at: 'locked' },
+        { name: 'aviso', mat: mat(SCENE.accent), at: 'locked' },
+      ],
+      {
+        arrival: 'vehicle',
+        vehicle: {
+          parts: [
+            { name: 'bike_metal', mat: mat(SCENE.metal) },
+            { name: 'bike_rodas', mat: mat(SCENE.ink) },
+          ],
+          lamp: { name: 'bike_farol', mat: lit('#ffffff') },
+          park: { rackY: -50 },
+          yawOffset: Math.PI / 2,
+          riderZ: 5,
+          riderScale: 0.72,
+        },
+        hat: { name: 'robo/chapeu', mat: robotMaterials().hat },
+        stationTop: 18.6,
+        source: [-100, 18, 26.2],
+      },
+    );
   },
 
   // a caixa pousa no balcão (frente da célula, y = −12 mm no .scad; tampo a 6 + 14 mm do pedestal)

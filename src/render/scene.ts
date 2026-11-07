@@ -40,7 +40,7 @@ import { describeFilterPolicy } from '../sim/filter';
 import { LAMBDA_START_CONCURRENCY, lambdaCap, type Simulation } from '../sim/engine';
 import type { GraphNode, SimEvent, Token } from '../sim/types';
 import { Effects } from './effects';
-import { dlqCurve, edgeCurve, LAMBDA_BATCH_SCALE, LAMBDA_DECK_H, lambdaSlot, NODE_SCALE, QUEUE_DEPTH, QUEUE_LEN, queueSlot, TOKEN_H, workerSlot } from './layout';
+import { dlqCurve, edgeCurve, LAMBDA_BATCH_SCALE, NODE_SCALE, QUEUE_DEPTH, QUEUE_LEN, queueSlot, TOKEN_H, workerSlot } from './layout';
 import { backdropTexture, beltTexture, flowTexture, GROUND_TILE, groundTexture } from './textures';
 import { bakedMaterial, bakeGeometry, bakeTree, isShared } from './bake';
 import { buildNode, NODE_COLORS, type NodeView } from './nodes';
@@ -363,7 +363,7 @@ export class SceneView {
       // à pose com movimento: a cena segue animando um pouco até tudo assentar
       this.settleUntil = now + SETTLE_MS;
     }
-    if (running || now < this.settleUntil || this.effects.busy || this.pops.size > 0 || this.ctrl.tool.type === 'connect') this.dirty = true;
+    if (running || now < this.settleUntil || this.effects.busy || this.pops.size > 0 || this.ctrl.tool.type === 'connect' || this.rigsMoving()) this.dirty = true;
     // parado e assentado, não há nada para animar nem redesenhar: o quadro sai quase de graça
     if (this.dirty) this.animate(now, dt, running);
     if (running) this.adaptQuality(dt);
@@ -525,7 +525,7 @@ export class SceneView {
     const levelId = this.ctrl.level?.id ?? null;
     if (this.builtVersion === this.ctrl.graphVersion && this.builtLevel === levelId) return;
     // tema ainda baixando: mantém a cena atual e monta quando o kit chegar (próximo quadro)
-    const kit = kitFor(this.ctrl.visualTheme);
+    const kit = kitFor(this.ctrl.visualTheme, this.ctrl.graph.nodes.some((n) => n.kind === 'lambda'));
     if (!kit) {
       // trocou de fase: melhor a cena vazia por um instante que as peças da fase anterior
       if (this.builtLevel !== levelId && this.nodeViews.size) {
@@ -651,6 +651,12 @@ export class SceneView {
     if (levelChanged) this.fitCamera();
   }
 
+  /** Algum ajudante da função ainda andando (a cena segue redesenhando até ele chegar). */
+  private rigsMoving(): boolean {
+    for (const v of this.nodeViews.values()) if (v.rig?.moving()) return true;
+    return false;
+  }
+
   // ───────────── animação ─────────────
 
   private animate(now: number, dt: number, running: boolean) {
@@ -687,7 +693,7 @@ export class SceneView {
         const c = sim.consumers.get(v.node.id);
         c?.workers.forEach((w, j) => {
           const pad = v.workerPads[j];
-          if (!pad && !v.station) return;
+          if (!pad && !v.rig) return;
           const color =
             w.state === 'starting'
               ? PAD.cold
@@ -704,24 +710,21 @@ export class SceneView {
                     : PAD.idle;
           if (pad) (pad.material as MeshBasicMaterial).color.copy(color);
           v.workers?.setPose(j, color === PAD.down ? 'down' : color === PAD.busy ? 'work' : color === PAD.polling ? 'poll' : color === PAD.off ? 'off' : 'idle');
-          v.station?.setLight(j, color);
-          v.station?.setBusy(j, w.state === 'processing' || w.state === 'receiving' || w.state === 'starting');
+          v.rig?.setWorker(j, w.state, w.warm, color);
         });
-        v.station?.update(c?.active ?? 0, dt, t);
+        // os ajudantes andam no ritmo do jogo (na velocidade padrão, 2×, no passo normal)
+        v.rig?.update(c?.active ?? 0, dt, t, running ? Math.min(2, Math.max(0.5, this.ctrl.speed / 2)) : 1);
         const mat = v.body.material as MeshBasicMaterial;
         mat.color.copy(c?.down ? DOWN_BODY : this.hex(v.baseColor));
       } else if (isWorkerNode) {
         for (const pad of v.workerPads) (pad.material as MeshBasicMaterial).color.copy(v.node.kind === 'lambda' ? PAD.off : PAD.idle);
         (v.body.material as MeshBasicMaterial).color.copy(this.hex(v.baseColor));
         v.workerPads.forEach((_, j) => v.workers?.setPose(j, 'idle'));
-        if (v.station) {
-          // montando: as instâncias iniciais em pé, à espera
+        if (v.rig) {
+          // montando: as instâncias iniciais esperando na fila da fonte
           const cap = lambdaCap((v.node as GraphNode<'lambda'>).config);
-          for (let j = 0; j < cap; j++) {
-            v.station.setLight(j, j < LAMBDA_START_CONCURRENCY ? PAD.idle : PAD.off);
-            v.station.setBusy(j, false);
-          }
-          v.station.update(Math.min(LAMBDA_START_CONCURRENCY, cap), dt, t);
+          for (let j = 0; j < cap; j++) v.rig.setWorker(j, 'idle', false, j < LAMBDA_START_CONCURRENCY ? PAD.idle : PAD.off);
+          v.rig.update(Math.min(LAMBDA_START_CONCURRENCY, cap), dt, t);
         }
       }
       v.workers?.update(dt, t);
@@ -916,7 +919,10 @@ export class SceneView {
         c.asyncQueue.slice(0, 24).forEach((ev, k) => {
           const col = k % 3;
           const layer = Math.floor(k / 3);
-          this.tmp.set(view.node.x - 0.55 * NODE_SCALE, (LAMBDA_DECK_H + 0.005) * NODE_SCALE + h * (layer + 0.5) * 1.08, view.node.z + (col - 1) * 0.15);
+          if (view.rig) this.tmp.copy(view.rig.source).multiplyScalar(NODE_SCALE).add(view.group.position);
+          else this.tmp.copy(view.group.position);
+          this.tmp.x += (col - 1) * 0.1;
+          this.tmp.y += h * (layer + 0.5) * 1.08;
           put(this.tmp, ev.token, LAMBDA_BATCH_SCALE, 0, ev.at > now ? 0.55 : 0);
         });
       }
@@ -925,7 +931,10 @@ export class SceneView {
         if (c.lambda) {
           // Lambda: o lote inteiro empilhado na bandeja do robô; a pilha baixa conforme ele processa.
           // A barra é o tempo da invocação contra o timeout da função (verde → âmbar → vermelho).
-          lambdaSlot(view.node, j, c.workers.length, this.tmp);
+          // nos ajudantes: no posto, nas mãos ou ainda na fonte
+          if (view.rig) view.rig.itemSpot(j, this.tmp);
+          else this.tmp.set(0, 0.1, 0);
+          this.tmp.multiplyScalar(NODE_SCALE).add(view.group.position);
           const h = TOKEN_H * LAMBDA_BATCH_SCALE;
           const left = w.batch.length - w.index;
           for (let k = 0; k < left; k++) {

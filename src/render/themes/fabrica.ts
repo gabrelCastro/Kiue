@@ -4,9 +4,12 @@ import { LIFT } from '../layout';
 import { THEME_MODEL_DATA } from '../models.fabrica.gen';
 import { modelGeometry, modelGeometryAt, registerModels } from '../models';
 import { contactShadow, mat, part, pedestal, shade } from '../pieces';
-import { SCENE, SERVICE } from '../../theme';
+import { CATEGORY, SCENE, SERVICE } from '../../theme';
 import { CARDBOARD, consumerBase, LiftFx, LIT, lit, PRACA_H, robotMaterials, statusLights, VendorRig } from './common';
-import type { ConsumerBuild, ProducerBuild, ThemeKit } from './kit';
+import type { ConsumerBuild, LambdaBuild, ProducerBuild, ThemeKit } from './kit';
+import { buildYard } from './funcao';
+import { bakedMaterial } from '../bake';
+
 
 /*
  * Tema Fábrica de brinquedos. Produtor = fabriquinha com cara (models/fabrica_produtor.scad): as
@@ -61,6 +64,32 @@ export const fabrica: ThemeKit = {
     const makers = new VendorRig(cells, robotMaterials(), { behind: 0.12 });
     model.add(...makers.meshes);
     return { body, baseColor, pickables: [body, base], labelY: 0.9, workerPads, workers: makers };
+  },
+
+  lambda(model, node: GraphNode<'lambda'>): LambdaBuild {
+    // robôs montados na hora (models/fabrica_funcao.scad): a cabine monta o robô, ele monta o brinquedo
+    const color = SERVICE.lambda;
+    return buildYard(
+      model,
+      node,
+      'fabrica_funcao',
+      [
+        { name: 'piso', mat: mat(SCENE.white) },
+        { name: 'tapete', mat: mat(shade(color, 0.62)) },
+        { name: 'metal', mat: mat(SCENE.metal) },
+        { name: 'corpo', mat: mat(color) },
+        { name: 'celula', mat: mat(SCENE.dark) },
+        { name: 'detalhe', mat: mat(SCENE.ink) },
+        { name: 'pecas_a', mat: mat(CATEGORY.azulClaro) },
+        { name: 'pecas_b', mat: mat(CATEGORY.ambar) },
+        { name: 'pecas_c', mat: mat(CATEGORY.violeta) },
+        { name: 'vidro', mat: bakedMaterial('#dff3ff', { transparent: true, opacity: 0.35 }) },
+        { name: 'bancada', mat: mat('#b0864f'), at: 'all' },
+        { name: 'pernas', mat: mat(SCENE.metal), at: 'all' },
+        { name: 'cones', mat: mat(SCENE.accent), at: 'locked' },
+      ],
+      { arrival: 'pod', hat: { name: 'fabrica_funcao/helice', mat: mat(SCENE.accent) }, stationTop: 19.6, source: [-100, 18, 11.7] },
+    );
   },
 
   // a caixa pousa no tampo da mesinha (centro em y = −8 mm; tampo a 6 + 18 mm)
