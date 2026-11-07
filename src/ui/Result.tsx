@@ -4,16 +4,8 @@ import { nextMeta } from '../game/level-catalog';
 import { chapterForLevel } from '../study/catalog';
 import { useController } from './hooks';
 import { Quiz } from './Quiz';
-
-export function Stars({ n, total = 3 }: { n: number; total?: number }) {
-  return (
-    <span class="stars" aria-label={`${n} de ${total} estrelas`}>
-      {Array.from({ length: total }, (_, i) => (
-        <span class={i < n ? 'on' : 'off'}>★</span>
-      ))}
-    </span>
-  );
-}
+import { Stars } from './Stars';
+export { Stars };
 
 export function ResultModal() {
   const ctrl = useController();

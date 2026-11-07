@@ -31,6 +31,8 @@ export class Effects {
     const last = this.lastByKey.get(key) ?? -Infinity;
     if (now - last < (throttleKey ? throttleMs : DEFAULT_THROTTLE_MS)) return;
     this.lastByKey.set(key, now);
+    // a chave pode levar o número da mensagem ("fora de ordem #123"): sem limpar, cresce sem fim
+    if (this.lastByKey.size > 400) for (const [k, t] of this.lastByKey) if (now - t > 2000) this.lastByKey.delete(k);
     if (this.active.length >= MAX_ACTIVE) this.remove(0);
     const div = document.createElement('div');
     div.className = `fx fx-${kind}`;

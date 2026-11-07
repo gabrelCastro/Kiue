@@ -2,7 +2,7 @@ import { Mesh, type Object3D } from 'three';
 import type { GraphNode } from '../../sim/types';
 import { BENCH_TOP, BOX_SPOT, LIFT, NODE_SCALE, TOKEN_H, workerCell } from '../layout';
 import { modelGeometry, modelGeometryAt } from '../models';
-import { contactShadow, mat, part, pedestal } from '../pieces';
+import { contactShadow, mat, matLive, part, pedestal } from '../pieces';
 import { ArmRig } from '../robots';
 import { SCENE, SERVICE, WORKER } from '../../theme';
 import type { ConsumerBuild, ProducerBuild, SendFx, ThemeKit } from './kit';
@@ -60,7 +60,7 @@ export const industria: ThemeKit = {
     const baseColor = SERVICE.consumer;
     contactShadow(model, 1.7, 1.6);
     const base = pedestal(model, 1.7, 1.6, baseColor);
-    const body = part('consumidor/corpo', mat(baseColor));
+    const body = part('consumidor/corpo', matLive(baseColor));
     model.add(body, part('consumidor/detalhe', mat(SCENE.ink)), part('consumidor/tampo', mat(SCENE.white)));
     const workers = Math.max(1, node.config.workers);
     const cells = Array.from({ length: workers }, (_, j) => {
@@ -71,7 +71,7 @@ export const industria: ThemeKit = {
     model.add(new Mesh(modelGeometryAt('consumidor/celula', cells), mat(SCENE.dark)));
     const workerPads: Mesh[] = [];
     for (const c of cells) {
-      const pad = new Mesh(modelGeometry('consumidor/luz'), mat(WORKER.idle));
+      const pad = new Mesh(modelGeometry('consumidor/luz'), matLive(WORKER.idle));
       pad.position.set(c.x, c.y, c.z);
       model.add(pad);
       workerPads.push(pad);

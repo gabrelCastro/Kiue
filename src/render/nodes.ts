@@ -17,7 +17,7 @@ import { bakedMaterial, bakeTree } from './bake';
 import { modelGeometry } from './models';
 import { beltTexture } from './textures';
 import { LAMBDA_DECK_H, LIFT, NODE_SCALE, QUEUE_DEPTH, QUEUE_HEIGHT, QUEUE_LEN } from './layout';
-import { contactShadow, mat, part, pedestal, shade } from './pieces';
+import { contactShadow, mat, matLive, part, pedestal, shade } from './pieces';
 import type { SendFx, ThemeKit, WorkerRig } from './themes';
 import { industria } from './themes/industria';
 import { LambdaStation } from './station';
@@ -46,6 +46,8 @@ export interface NodeView {
   group: Group;
   pickables: Object3D[];
   label: HTMLDivElement;
+  /** Último HTML posto no rótulo (comparar com innerHTML obrigava o navegador a serializá-lo). */
+  labelHtml?: string;
   spinners: Object3D[];
   workerPads: Mesh[];
   body: Mesh;
@@ -144,7 +146,7 @@ export function buildNode(node: GraphNode, isDlq: boolean, kit: ThemeKit = indus
       baseColor = NODE_COLORS.lambda;
       contactShadow(model, 2.0, 2.0);
       const deck = new Mesh(modelGeometry('lambda/deck'), mat(SCENE.light));
-      body = new Mesh(modelGeometry('lambda/hub'), mat(baseColor, { flatShading: true }));
+      body = new Mesh(modelGeometry('lambda/hub'), matLive(baseColor, { flatShading: true }));
       const glyph = new Mesh(new PlaneGeometry(0.66, 0.66), new MeshBasicMaterial({ map: lambdaGlyph(), transparent: true, depthWrite: false }));
       glyph.rotation.x = -Math.PI / 2;
       glyph.position.y = LAMBDA_DECK_H + 0.4 + 0.004;

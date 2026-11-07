@@ -1,4 +1,4 @@
-import { BufferAttribute, Matrix3, Mesh, MeshBasicMaterial, Vector3, type BufferGeometry, type Object3D } from 'three';
+import { BufferAttribute, Matrix3, Mesh, MeshBasicMaterial, Vector3, type BufferGeometry, type Matrix4, type Object3D } from 'three';
 
 /*
  * Iluminação "assada": a luz é calculada uma vez, quando a peça é montada, e gravada na cor de
@@ -25,7 +25,8 @@ const normalMatrix = new Matrix3();
 
 /** Material sem luz que recebe a iluminação assada. `flat` dá o visual facetado (ícones, cones). */
 export function bakedMaterial(color: string, opts: { flat?: boolean; transparent?: boolean; opacity?: number } = {}): MeshBasicMaterial {
-  const m = new MeshBasicMaterial({ color, vertexColors: true, transparent: opts.transparent, opacity: opts.opacity ?? 1, depthWrite: !opts.transparent });
+  // só passa `transparent` quando pedido: undefined vira um aviso do three.js no console a cada material
+  const m = new MeshBasicMaterial({ color, vertexColors: true, opacity: opts.opacity ?? 1, depthWrite: !opts.transparent, ...(opts.transparent ? { transparent: true } : {}) });
   if (opts.flat) m.userData.flat = true;
   return m;
 }
@@ -54,6 +55,23 @@ export function bakeGeometry(geometry: BufferGeometry, matrixWorld: Mesh['matrix
   geometry.setAttribute('color', new BufferAttribute(colors, 3));
 }
 
+const bakedCache = new Map<string, BufferGeometry>();
+
+/** Chave da geometria assada: origem (userData.src) + rotação/escala + altura do objeto no mundo. */
+function bakeKey(geometry: BufferGeometry, m: Matrix4, flat: boolean, groundAo: boolean): string | null {
+  const src = geometry.userData.src as string | undefined;
+  if (!src) return null;
+  const e = m.elements;
+  // colunas da rotação/escala e a translação em y; x e z (onde a peça está no chão) não mudam a luz
+  const parts = [0, 1, 2, 4, 5, 6, 8, 9, 10, 13].map((i) => Math.round(e[i] * 1e4));
+  return `${src}|${flat ? 1 : 0}${groundAo ? 1 : 0}|${parts.join(',')}`;
+}
+
+/** Geometria ou material reaproveitado entre peças e reconstruções: quem limpa a cena não descarta. */
+export function isShared(x: { userData: Record<string, unknown> } | null | undefined): boolean {
+  return !!x?.userData.shared;
+}
+
 /**
  * Assa a luz em todas as malhas de `root` que usam material assado. `groundAo: false` para o que
  * não está "apoiado" no chão (o próprio tabuleiro). Chamar depois de posicionar
@@ -66,6 +84,25 @@ export function bakeTree(root: Object3D, opts: { groundAo?: boolean } = {}): voi
     if (!(o instanceof Mesh)) return;
     const material = o.material as MeshBasicMaterial;
     if (!(material instanceof MeshBasicMaterial) || !material.vertexColors) return;
+    const groundAo = opts.groundAo ?? true;
+    // geometria conhecida (parte modelada, base arredondada): a luz só depende da orientação e da
+    // altura, então a mesma parte na mesma pose é assada uma vez e compartilhada (entre peças e
+    // entre reconstruções da cena)
+    const key = bakeKey(o.geometry, o.matrixWorld, !!material.userData.flat, groundAo);
+    if (key) {
+      let geo = bakedCache.get(key);
+      if (!geo) {
+        const fresh: BufferGeometry = material.userData.flat && o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+        if (material.userData.flat) fresh.computeVertexNormals();
+        bakeGeometry(fresh, o.matrixWorld, groundAo);
+        fresh.userData.shared = true;
+        bakedCache.set(key, fresh);
+        geo = fresh;
+      }
+      if (!o.geometry.userData.shared) o.geometry.dispose();
+      o.geometry = geo;
+      return;
+    }
     if (material.userData.flat && o.geometry.index) {
       // sem índice, cada triângulo tem os próprios vértices: a normal por face dá o facetado
       const flat = o.geometry.toNonIndexed();

@@ -19,13 +19,45 @@ export function part(name: string, material: MeshBasicMaterial): Mesh {
  * Material das peças: luz assada nos vértices (ver bake.ts). `emissive` (janela acesa, LED) vira
  * cor pura, sem sombreado; os demais campos de material físico antigos são ignorados.
  */
-export function mat(color: string, extra: { flatShading?: boolean; emissive?: string; emissiveIntensity?: number; roughness?: number; metalness?: number } = {}) {
+type MatExtra = { flatShading?: boolean; emissive?: string; emissiveIntensity?: number; roughness?: number; metalness?: number };
+
+const materials = new Map<string, MeshBasicMaterial>();
+
+/**
+ * Material compartilhado por cor (entre peças e entre reconstruções da cena): criar e descartar a
+ * cada mudança obrigava a placa de vídeo a recompilar os shaders. Não mude a cor dele; para o
+ * que muda de cor em jogo (luz do worker, consumidor fora do ar), use `matLive`.
+ */
+export function mat(color: string, extra: MatExtra = {}): MeshBasicMaterial {
+  const key = `${color}|${extra.flatShading ? 1 : 0}|${extra.emissive ? 1 : 0}`;
+  let m = materials.get(key);
+  if (!m) {
+    m = matLive(color, extra);
+    m.userData.shared = true;
+    materials.set(key, m);
+  }
+  return m;
+}
+
+/** Material só desta malha: a cena pode mudar a cor dele durante o jogo. */
+export function matLive(color: string, extra: MatExtra = {}): MeshBasicMaterial {
   if (extra.emissive) return new MeshBasicMaterial({ color });
   return bakedMaterial(color, { flat: extra.flatShading });
 }
 
+const roundedCache = new Map<string, RoundedBoxGeometry>();
+
+/** Caixa arredondada (base das peças): gerar a geometria é caro, então cada medida é feita uma vez. */
 export function rounded(w: number, h: number, d: number, radius = 0.1) {
-  return new RoundedBoxGeometry(w, h, d, 3, Math.min(radius, w / 2, h / 2, d / 2));
+  const r = Math.min(radius, w / 2, h / 2, d / 2);
+  const key = `rounded:${w},${h},${d},${r}`;
+  let g = roundedCache.get(key);
+  if (!g) {
+    g = new RoundedBoxGeometry(w, h, d, 3, r);
+    g.userData = { src: key, shared: true };
+    roundedCache.set(key, g);
+  }
+  return g;
 }
 
 /** Mistura a cor da peça com `toward` (por padrão, a base do modo: claro de dia, grafite à noite). */

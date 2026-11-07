@@ -14,8 +14,16 @@ const CREASE = (35 * Math.PI) / 180;
 
 const cache = new Map<string, BufferGeometry>();
 
+/** Modelos conhecidos: os do jogo base e os de cada tema já carregado (registerModels). */
+const DATA: Record<string, { v: number; data: string }> = { ...MODEL_DATA };
+
+/** Os kits de tema registram os próprios modelos quando são carregados (models.<tema>.gen.ts). */
+export function registerModels(data: Record<string, { v: number; data: string }>): void {
+  Object.assign(DATA, data);
+}
+
 function decode(name: string): BufferGeometry {
-  const entry = MODEL_DATA[name];
+  const entry = DATA[name];
   if (!entry) throw new Error(`modelo desconhecido: ${name}`);
   const bin = atob(entry.data);
   const bytes = new Uint8Array(bin.length);
@@ -42,22 +50,29 @@ function decode(name: string): BufferGeometry {
 }
 
 /**
- * Geometria de uma parte ("consumidor/corpo"), já em unidades do jogo. Cada chamada devolve uma
- * cópia: a luz é assada nas cores dos vértices de cada peça (bake.ts).
+ * Geometria de uma parte ("consumidor/corpo"), já em unidades do jogo. A mesma instância é
+ * compartilhada (não mexa nela): bake.ts assa a luz numa cópia, guardada por parte e pose.
  */
 export function modelGeometry(name: string): BufferGeometry {
   let geo = cache.get(name);
   if (!geo) {
     geo = decode(name);
+    geo.userData = { src: name, shared: true };
     cache.set(name, geo);
   }
-  return geo.clone();
+  return geo;
 }
 
 /** Várias cópias da mesma parte, deslocadas, numa geometria só (uma chamada de desenho). */
 export function modelGeometryAt(name: string, offsets: { x: number; y: number; z: number }[]): BufferGeometry {
-  const parts = offsets.map((o) => modelGeometry(name).translate(o.x, o.y, o.z));
-  const merged = mergeGeometries(parts);
-  for (const p of parts) p.dispose();
+  const key = `${name}@${offsets.map((o) => `${o.x.toFixed(4)},${o.y.toFixed(4)},${o.z.toFixed(4)}`).join(';')}`;
+  let merged = cache.get(key);
+  if (!merged) {
+    const parts = offsets.map((o) => modelGeometry(name).clone().translate(o.x, o.y, o.z));
+    merged = mergeGeometries(parts);
+    for (const p of parts) p.dispose();
+    merged.userData = { src: key, shared: true };
+    cache.set(key, merged);
+  }
   return merged;
 }

@@ -2,7 +2,7 @@ import { BoxGeometry, Color, DynamicDrawUsage, Fog, InstancedMesh, Mesh, MeshBas
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { MESSAGE_TYPES } from '../game/catalog';
 import type { GraphNode } from '../sim/types';
-import { bakedMaterial, bakeGeometry, bakeTree } from './bake';
+import { bakedMaterial, bakeGeometry, bakeTree, isShared } from './bake';
 import { Effects } from './effects';
 import { edgeCurve, queueSlot, TOKEN_H, workerSlot } from './layout';
 import { buildNode, type NodeView } from './nodes';
@@ -408,8 +408,9 @@ export function mountShowcase(container: HTMLElement, opts: ShowcaseOptions): ()
     // texturas de esteira, canos, fundo e sombras são compartilhadas com o jogo: ficam
     scene.traverse((o) => {
       if (o instanceof Mesh) {
-        o.geometry.dispose();
-        (o.material as MeshBasicMaterial).dispose();
+        // o compartilhado (bake.ts, pieces.ts) segue valendo para o jogo e a próxima vitrine
+        if (!isShared(o.geometry)) o.geometry.dispose();
+        if (!isShared(o.material as MeshBasicMaterial)) (o.material as MeshBasicMaterial).dispose();
       }
     });
     groundTex.dispose();

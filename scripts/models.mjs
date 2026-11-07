@@ -17,7 +17,7 @@ const MODELS = {
   fila: ['moldura', 'base', 'detalhe', 'rolos', 'guias', 'alerta'],
   produtor: ['corpo', 'telhado', 'detalhe', 'doca', 'janelas', 'portao', 'palete', 'caixas'],
   lambda: ['deck', 'hub', 'hub_detalhe', 'baia', 'trava', 'luz', 'robo_corpo', 'robo_faixa', 'robo_detalhe'],
-  // tema fazenda (src/render/themes/fazenda.ts)
+  // tema fazenda (src/render/themes/fazenda.ts): vai para models.fazenda.gen.ts, baixado só com o tema
   robo: ['corpo', 'visor', 'olhos', 'chapeu', 'bracos'],
   fazenda_produtor: ['chao', 'celeiro', 'telhado', 'portao', 'detalhe', 'silo', 'terra', 'verde', 'esteira', 'caixas'],
   fazenda_feira: ['praca', 'detalhe', 'balcao', 'toldo_a', 'toldo_b', 'poste', 'luz'],
@@ -61,22 +61,29 @@ function pack(stl) {
   return { data: buf.toString('base64'), vertices: verts.length / 3, triangles: tris.length / 3 };
 }
 
-const lines = [];
+/** Modelos de cada tema que não é o padrão: arquivo à parte, importado só pelo kit do tema. */
+const THEME_FILES = { robo: 'fazenda', fazenda_produtor: 'fazenda', fazenda_feira: 'fazenda' };
+
+const files = new Map(); // arquivo → linhas
 let total = 0;
 for (const [model, parts] of Object.entries(MODELS)) {
+  const file = THEME_FILES[model] ? `src/render/models.${THEME_FILES[model]}.gen.ts` : 'src/render/models.gen.ts';
+  if (!files.has(file)) files.set(file, []);
   for (const part of parts) {
     const p = pack(exportPart(model, part));
     total += p.triangles;
     console.log(`${model}/${part}: ${p.triangles} triângulos, ${p.vertices} vértices`);
-    lines.push(`  '${model}/${part}': { v: ${p.vertices}, data: '${p.data}' },`);
+    files.get(file).push(`  '${model}/${part}': { v: ${p.vertices}, data: '${p.data}' },`);
   }
 }
 rmSync(tmp, { recursive: true });
 
-writeFileSync(
-  'src/render/models.gen.ts',
+const HEADER =
   `// Gerado por scripts/models.mjs a partir de models/*.scad. Não edite à mão.\n` +
-    `// Formato: v posições Int16 (x, y, z em centésimos de mm, Z para cima) seguidas dos índices Uint16.\n` +
-    `export const MODEL_DATA: Record<string, { v: number; data: string }> = {\n${lines.join('\n')}\n};\n`,
-);
-console.log(`total: ${total} triângulos → src/render/models.gen.ts`);
+  `// Formato: v posições Int16 (x, y, z em centésimos de mm, Z para cima) seguidas dos índices Uint16.\n`;
+for (const [file, lines] of files) {
+  const name = file === 'src/render/models.gen.ts' ? 'MODEL_DATA' : 'THEME_MODEL_DATA';
+  writeFileSync(file, HEADER + `export const ${name}: Record<string, { v: number; data: string }> = {\n${lines.join('\n')}\n};\n`);
+  console.log(`${file}: ${lines.length} partes`);
+}
+console.log(`total: ${total} triângulos`);

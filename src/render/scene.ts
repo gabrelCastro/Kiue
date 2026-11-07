@@ -42,9 +42,9 @@ import type { GraphNode, SimEvent, Token } from '../sim/types';
 import { Effects } from './effects';
 import { dlqCurve, edgeCurve, LAMBDA_BATCH_SCALE, LAMBDA_DECK_H, lambdaSlot, NODE_SCALE, QUEUE_DEPTH, QUEUE_LEN, queueSlot, TOKEN_H, workerSlot } from './layout';
 import { backdropTexture, beltTexture, flowTexture, GROUND_TILE, groundTexture } from './textures';
-import { bakedMaterial, bakeGeometry, bakeTree } from './bake';
+import { bakedMaterial, bakeGeometry, bakeTree, isShared } from './bake';
 import { buildNode, NODE_COLORS, type NodeView } from './nodes';
-import { kitFor, type ThemeKit } from './themes';
+import { kitFor, loadKit, type ThemeKit } from './themes';
 import { describeNode } from './labels';
 import { OUTCOME, SCENE, WORKER } from '../theme';
 
@@ -90,6 +90,8 @@ const VIEW_HEIGHT_MIN = 13;
  * Direção da câmera (ortográfica), em vista de diorama: ~51° de elevação e girada ~22° para a
  * direita, mostrando a frente e a lateral das peças. Mais baixa, as filas empilhadas se cobrem.
  */
+/** Quanto a cena segue animando depois de uma mudança, para as poses assentarem na tela (ms). */
+const SETTLE_MS = 1200;
 const CAMERA_DIR = new Vector3(0.4, 1.35, 1).normalize();
 const CAMERA_DISTANCE = 40;
 /** Limites do zoom automático ao abrir uma fase: perto o bastante para ver as peças, sem cortar a área de montagem. */
@@ -136,7 +138,7 @@ export class SceneView {
   private world = new Group();
   private nodeViews = new Map<string, NodeView>();
   /** Kit do tema visual da montagem atual (escolhido a cada reconstrução: fase ou Sandbox). */
-  private kit: ThemeKit = kitFor('industria');
+  private kit: ThemeKit = kitFor('industria')!;
   private curves = new Map<string, Curve<Vector3>>();
   private edgeViews: EdgeView[] = [];
   private tokens: InstancedMesh;
@@ -185,6 +187,12 @@ export class SceneView {
   private panning = false;
   /** Peças que acabaram de entrar na cena (id → início da animação de entrada). */
   private pops = new Map<string, number>();
+  /** Até quando a cena segue animando depois da última mudança (ver SETTLE_MS). */
+  private settleUntil = 0;
+  /** Rótulos mudaram de lugar ou de conteúdo: precisam ser rearrumados (declutter). */
+  private labelsNeedLayout = true;
+  /** Estado da última atualização dos rótulos (parado, só refaz se mudar). */
+  private labelKey = '';
   private knownIds = new Set<string>();
   /** Rótulos de conexão (filtro, DLQ): entram na arrumação de rótulos com a menor prioridade. */
   private edgeLabels: HTMLElement[] = [];
@@ -343,15 +351,21 @@ export class SceneView {
     if (signature !== this.lastSignature) {
       this.lastSignature = signature;
       this.dirty = true;
+      // depois de uma mudança (parou a simulação, montou, selecionou), braços e vendedores voltam
+      // à pose com movimento: a cena segue animando um pouco até tudo assentar
+      this.settleUntil = now + SETTLE_MS;
     }
-    if (running || this.effects.busy || this.pops.size > 0 || this.ctrl.tool.type === 'connect') this.dirty = true;
-    this.animate(now, dt, running);
+    if (running || now < this.settleUntil || this.effects.busy || this.pops.size > 0 || this.ctrl.tool.type === 'connect') this.dirty = true;
+    // parado e assentado, não há nada para animar nem redesenhar: o quadro sai quase de graça
+    if (this.dirty) this.animate(now, dt, running);
     if (running) this.adaptQuality(dt);
     if (this.dirty) {
       this.dirty = false;
       this.followGround();
       this.renderer.render(this.scene, this.camera);
       this.labels.render(this.scene, this.camera);
+      // rótulos podem ter mudado de lugar na tela
+      this.labelsNeedLayout = true;
     }
     requestAnimationFrame(this.loop);
   };
@@ -487,10 +501,10 @@ export class SceneView {
         // o CSS2DObject só remove o próprio elemento quando ele é removido diretamente
         if (o instanceof CSS2DObject) o.element.remove();
         const m = o as Mesh;
-        m.geometry?.dispose();
+        // geometrias e materiais compartilhados (bake.ts, pieces.ts) continuam valendo na próxima montagem
+        if (m.geometry && !isShared(m.geometry)) m.geometry.dispose();
         const material = m.material;
-        if (Array.isArray(material)) material.forEach((x) => x.dispose());
-        else material?.dispose();
+        for (const x of Array.isArray(material) ? material : material ? [material] : []) if (!isShared(x)) x.dispose();
       });
     }
     this.nodeViews.clear();
@@ -502,12 +516,18 @@ export class SceneView {
   private sync() {
     const levelId = this.ctrl.level?.id ?? null;
     if (this.builtVersion === this.ctrl.graphVersion && this.builtLevel === levelId) return;
+    // tema ainda baixando: mantém a cena atual e monta quando o kit chegar (próximo quadro)
+    const kit = kitFor(this.ctrl.visualTheme);
+    if (!kit) {
+      void loadKit(this.ctrl.visualTheme).then(() => (this.dirty = true));
+      return;
+    }
     const levelChanged = this.builtLevel !== levelId;
     this.builtVersion = this.ctrl.graphVersion;
     this.builtLevel = levelId;
     if (levelChanged) this.autoFit = true;
     this.clearWorld();
-    this.kit = kitFor(this.ctrl.visualTheme);
+    this.kit = kit;
     const g = this.ctrl.graph;
     const dlqs = dlqIds(g);
 
@@ -701,12 +721,25 @@ export class SceneView {
     this.labelTimer -= dt;
     if (this.labelTimer <= 0) {
       this.labelTimer = 120;
-      for (const v of this.nodeViews.values()) {
-        const html = describeNode(v.node, this.ctrl, sim, this.hoverId === v.node.id || this.ctrl.selection?.id === v.node.id);
-        if (v.label.innerHTML !== html) v.label.innerHTML = html;
-        v.label.classList.toggle('selected', this.ctrl.selection?.id === v.node.id);
+      // parado, o texto só muda com o estado (assinatura) ou com o ponteiro
+      const key = `${this.lastSignature}|${this.hoverId}`;
+      if (running || key !== this.labelKey || this.labelsNeedLayout) {
+        this.labelKey = key;
+        let changed = false;
+        for (const v of this.nodeViews.values()) {
+          const html = describeNode(v.node, this.ctrl, sim, this.hoverId === v.node.id || this.ctrl.selection?.id === v.node.id);
+          if (v.labelHtml !== html) {
+            v.label.innerHTML = html;
+            v.labelHtml = html;
+            changed = true;
+          }
+          v.label.classList.toggle('selected', this.ctrl.selection?.id === v.node.id);
+        }
+        if (changed || this.labelsNeedLayout) {
+          this.labelsNeedLayout = false;
+          this.declutter();
+        }
       }
-      this.declutter();
     }
   }
 
@@ -726,7 +759,13 @@ export class SceneView {
       el.classList.remove('faded');
       items.push({ el, prio: 0, node: false });
     }
+    // Lê o layout em lote (ler depois de cada escrita fazia o navegador recalcular a página a cada
+    // rótulo): 1) tamanho cheio de todos; 2) tamanho compacto dos que podem encolher.
     const rects = new Map(items.map((it) => [it.el, it.el.getBoundingClientRect()]));
+    const shrinkable = items.filter((it) => it.node && it.prio < 2);
+    for (const it of shrinkable) it.el.classList.add('compact');
+    const compactRects = new Map(shrinkable.map((it) => [it.el, it.el.getBoundingClientRect()]));
+    for (const it of shrinkable) it.el.classList.remove('compact');
     items.sort((a, b) => b.prio - a.prio || rects.get(b.el)!.bottom - rects.get(a.el)!.bottom);
     const placed: DOMRect[] = [];
     const hits = (r: DOMRect) => placed.some((p) => r.left < p.right + 2 && r.right > p.left - 2 && r.top < p.bottom + 2 && r.bottom > p.top - 2);
@@ -736,7 +775,7 @@ export class SceneView {
       if (it.prio < 2 && hits(r)) {
         if (it.node) {
           it.el.classList.add('compact');
-          r = it.el.getBoundingClientRect();
+          r = compactRects.get(it.el)!;
         }
         if (hits(r)) {
           it.el.classList.add('faded');
@@ -1252,6 +1291,7 @@ export class SceneView {
     if (id !== this.hoverId) {
       this.hoverId = id;
       this.labelTimer = 0;
+      this.dirty = true;
     }
     el.style.cursor = tool.type === 'place' ? 'copy' : tool.type === 'connect' ? (id ? 'alias' : 'crosshair') : id ? 'pointer' : 'default';
   };

@@ -1,19 +1,24 @@
 import { useEffect, useState } from 'preact/hooks';
 import { useController } from './hooks';
-import { LevelScreen } from './LevelScreen';
 import { Menu } from './Menu';
-import { StudyPanel, StudyScreen } from './Study';
 import { AuthDialog } from './auth/AuthDialog';
 import { usePhonePortrait } from './device';
+import { prefetchScreens, useLevelScreen, useStudyScreen } from './lazy-screens';
 import { prefetchScene } from './scene-loader';
 
 export function App() {
   const ctrl = useController();
-  useEffect(prefetchScene, []);
+  useEffect(() => {
+    prefetchScreens();
+    prefetchScene();
+  }, []);
+  // telas carregadas sob demanda (lazy-screens.ts); enquanto baixam, a área fica vazia por um instante
+  const level = useLevelScreen(ctrl.screen === 'level');
+  const study = useStudyScreen(ctrl.screen === 'study' || (ctrl.screen === 'level' && !!ctrl.study.panel));
   return (
     <>
-      {ctrl.screen === 'menu' ? <Menu /> : ctrl.screen === 'study' ? <StudyScreen /> : <LevelScreen />}
-      {ctrl.screen === 'level' && ctrl.study.panel && <StudyPanel />}
+      {ctrl.screen === 'menu' ? <Menu /> : ctrl.screen === 'study' ? study && <study.StudyScreen /> : level && <level.LevelScreen />}
+      {ctrl.screen === 'level' && ctrl.study.panel && study && <study.StudyPanel />}
       <AuthDialog />
       <RotateHint onLevel={ctrl.screen === 'level'} />
       {ctrl.screen !== 'level' && ctrl.toast && <div class={`toast floating ${ctrl.toast.kind}`}>{ctrl.toast.text}</div>}

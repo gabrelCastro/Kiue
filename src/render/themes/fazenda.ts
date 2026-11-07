@@ -1,8 +1,9 @@
 import { BoxGeometry, Group, InstancedMesh, Mesh, MeshBasicMaterial, Object3D, type Material } from 'three';
 import type { GraphNode } from '../../sim/types';
 import { LIFT, workerCell } from '../layout';
-import { modelGeometry, modelGeometryAt } from '../models';
-import { contactShadow, mat, part, pedestal, shade } from '../pieces';
+import { THEME_MODEL_DATA } from '../models.fazenda.gen';
+import { modelGeometry, modelGeometryAt, registerModels } from '../models';
+import { contactShadow, mat, matLive, part, pedestal, shade } from '../pieces';
 import { SCENE, SERVICE, WORKER } from '../../theme';
 import type { ConsumerBuild, ProducerBuild, SendFx, ThemeKit, WorkerPose, WorkerRig } from './kit';
 
@@ -12,6 +13,8 @@ import type { ConsumerBuild, ProducerBuild, SendFx, ThemeKit, WorkerPose, Worker
  * (models/fazenda_feira.scad): cada worker é uma barraquinha com um robô vendedor (models/robo.scad).
  * Medidas dos .scad em mm / 100, antes do NODE_SCALE; o .scad tem a frente em −y, o jogo em +z.
  */
+
+registerModels(THEME_MODEL_DATA);
 
 const WOOD = '#b0864f';
 const SOIL = '#9a7448';
@@ -213,7 +216,7 @@ export const fazenda: ThemeKit = {
     const baseColor = SERVICE.consumer;
     contactShadow(model, 1.7, 1.6);
     const base = pedestal(model, 1.7, 1.6, baseColor);
-    const body = part('fazenda_feira/praca', mat(baseColor));
+    const body = part('fazenda_feira/praca', matLive(baseColor));
     model.add(body, part('fazenda_feira/detalhe', mat(SCENE.ink)));
     const workers = Math.max(1, node.config.workers);
     const cells = Array.from({ length: workers }, (_, j) => {
@@ -229,7 +232,7 @@ export const fazenda: ThemeKit = {
     );
     // a lanterna de cada barraca é a luz de estado do worker
     const workerPads: Mesh[] = cells.map((c) => {
-      const pad = new Mesh(modelGeometry('fazenda_feira/luz'), mat(WORKER.idle));
+      const pad = new Mesh(modelGeometry('fazenda_feira/luz'), matLive(WORKER.idle));
       pad.position.set(c.x, c.y, c.z);
       model.add(pad);
       return pad;
