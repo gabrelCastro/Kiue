@@ -44,6 +44,15 @@ if (config.staticDir) {
       xFrameOptions: 'DENY',
     }),
   );
+  // Cache: os arquivos com hash no nome (assets/) mudam de nome a cada versão e podem ficar para
+  // sempre; o resto (index.html, sw.js, manifesto, imagens) é conferido a cada visita (304 se nada
+  // mudou). Sem cabeçalho, o navegador guardava o index.html por conta própria e seguia mostrando
+  // a versão anterior depois de um deploy.
+  root.use('/*', async (c, next) => {
+    await next();
+    if (c.req.path.startsWith('/api/') || c.res.headers.has('Cache-Control')) return;
+    c.res.headers.set('Cache-Control', c.req.path.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
+  });
   root.use('/*', serveStatic({ root: config.staticDir }));
   root.get('*', serveStatic({ path: `${config.staticDir}/index.html` }));
 }
