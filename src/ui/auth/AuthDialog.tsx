@@ -40,9 +40,9 @@ export function AuthDialog() {
   return (
     <div class="modal-backdrop" onClick={(e) => e.target === e.currentTarget && auth.close()}>
       <div class="modal auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
-        <div class="row between">
+        <div class="auth-head">
           <h2 id="auth-title">{TITLES[d.mode]}</h2>
-          <button class="btn ghost icon" onClick={() => auth.close()} aria-label="Fechar">
+          <button class="auth-close" onClick={() => auth.close()} aria-label="Fechar">
             ✕
           </button>
         </div>
@@ -113,8 +113,8 @@ function RegisterForm() {
         return auth.register(name, email, password);
       })}
     >
+      {!auth.dialog?.reason && <p class="auth-lead">Libere as {CATALOG.length} fases e o sandbox completo, com progresso e sandboxes salvos para jogar de qualquer computador. É grátis.</p>}
       <GoogleButton label="Continuar com o Google" />
-      {!auth.dialog?.reason && <p class="muted small auth-lead">Com a conta você libera as {CATALOG.length} fases e o sandbox completo, e seu progresso e seus sandboxes ficam salvos para jogar de qualquer computador. É grátis.</p>}
       <Field label="Nome" error={f.fieldError('name')}>
         <TextInput type="text" autoComplete="name" maxLength={60} value={name} onValue={setName} autoFocus required />
       </Field>
@@ -215,22 +215,24 @@ function AccountPanel() {
     <div class="account">
       <div class="account-head">
         <Avatar name={user.name} large />
-        <div>
+        <div class="account-who">
           <div class="account-name">{user.name}</div>
-          <div class="muted small">{user.email}</div>
-          <div class="muted small">
-            Conta criada em {new Date(user.createdAt).toLocaleDateString('pt-BR')}
-            {user.google ? ' · conectada ao Google' : ''}
-          </div>
+          <div class="account-email">{user.email}</div>
+          <span class="account-chip">
+            {user.google ? 'Google · ' : ''}desde {new Date(user.createdAt).toLocaleDateString('pt-BR')}
+          </span>
         </div>
       </div>
       <NameSection initial={user.name} />
-      <PasswordSection />
-      <SessionsSection />
-      <DeleteSection />
-      <div class="row end">
-        <button class="btn" onClick={() => void auth.logout()}>
-          Sair
+      <div class="account-rows">
+        <PasswordSection />
+        <SessionsSection />
+        <DeleteSection />
+      </div>
+      <div class="account-foot">
+        <span class="muted small">Seu progresso fica salvo na nuvem.</span>
+        <button class="auth-logout" onClick={() => void auth.logout()}>
+          Sair da conta
         </button>
       </div>
     </div>
@@ -288,7 +290,7 @@ function SetPasswordSection({ email }: { email: string }) {
       <div class="row between">
         <div>
           <div class="field-label">Senha</div>
-          <div class="muted small">Você entra com o Google. Para entrar também com e-mail e senha, defina uma.</div>
+          <div class="muted small">Você entra com o Google. Defina uma senha para entrar também com e-mail.</div>
         </div>
         <button class="btn" disabled={f.busy || sent} onClick={f.submit(async () => { await auth.requestReset(email); setSent(true); })}>
           Definir senha
@@ -359,10 +361,10 @@ function SessionsSection() {
       <div class="row between">
         <div>
           <div class="field-label">Outros aparelhos</div>
-          <div class="muted small">Desconecta a conta de todos os outros navegadores.</div>
+          <div class="muted small">Desconecta a conta dos outros navegadores.</div>
         </div>
         <button class="btn" disabled={f.busy} onClick={f.submit(async () => setResult(await auth.logoutOthers()))}>
-          Sair dos outros
+          Desconectar
         </button>
       </div>
       {result !== null && <p class="field-ok">{result === 0 ? 'Nenhum outro aparelho estava conectado.' : `${result} ${result === 1 ? 'aparelho desconectado' : 'aparelhos desconectados'}.`}</p>}
@@ -431,7 +433,7 @@ function GoogleButton({ label }: { label: string }) {
         {label}
       </button>
       <div class="auth-or" aria-hidden="true">
-        <span>ou</span>
+        <span>ou com e-mail</span>
       </div>
     </>
   );

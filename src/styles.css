@@ -2904,6 +2904,224 @@ html.pinned-viewport body {
   }
 }
 
+/* ───────── diálogo de conta (Entrar, Criar conta, Sua conta…) ─────────
+   Visual próprio, mais calmo que o resto do jogo: um único botão forte por tela (o principal),
+   os outros discretos de contorno fino, sem o bloco de sombra sólida (no noturno ela virava um
+   risco branco), cantos levemente arredondados e mais respiro. */
+.auth-modal {
+  width: min(420px, 100%);
+  padding: 24px;
+  gap: 18px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  box-shadow: 0 20px 60px -12px rgba(var(--shadow-ink), 0.45), 0 2px 6px rgba(var(--shadow-ink), 0.12);
+}
+.auth-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.auth-modal h2 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+}
+.auth-close {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+.auth-close:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+.auth-close:focus-visible {
+  outline: 2px solid var(--focus);
+}
+.auth-modal .auth-form {
+  gap: 16px;
+}
+.auth-modal .auth-lead {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-2);
+}
+.auth-modal .auth-switch {
+  font-size: 14px;
+}
+/* botões: sem bloco nem sombra sólida */
+.auth-modal .btn,
+.auth-modal .btn:hover:not(:disabled),
+.auth-modal .btn:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+.auth-modal .btn {
+  border-width: 1px;
+  border-radius: 6px;
+  font-weight: 700;
+  padding: 7px 14px;
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.auth-modal .btn:hover:not(:disabled) {
+  background: var(--panel-2);
+}
+.auth-modal .btn.block {
+  padding-top: 11px;
+  padding-bottom: 11px;
+  font-size: 15px;
+}
+.auth-modal .btn.primary {
+  /* azul forte com texto branco nos dois modos (no noturno, o --primary claro com texto escuro
+     ficava desbotado); branco sobre --azul-600 tem contraste 5,2:1 */
+  background: var(--azul-600);
+  color: #ffffff;
+  border-color: transparent;
+}
+.auth-modal .btn.primary:hover:not(:disabled) {
+  background: var(--azul-700);
+}
+/* Google: contorno neutro com a marca, igual aos outros botões discretos, nos dois modos */
+.auth-modal .btn.google-btn {
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--input-border);
+  font-weight: 600;
+}
+.auth-modal .btn.google-btn:hover:not(:disabled) {
+  background: var(--panel-2);
+  border-color: var(--text-2);
+  color: var(--text);
+}
+.auth-modal .btn.primary:disabled {
+  background: var(--disabled-bg);
+  color: var(--disabled-text);
+}
+.auth-modal .btn.danger {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 45%, transparent);
+}
+.auth-modal .btn.danger:hover:not(:disabled) {
+  background: var(--bad-soft);
+}
+.auth-modal .btn.ghost {
+  border-color: transparent;
+}
+.auth-modal .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.auth-modal .btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+/* campos mais altos e com mais respiro */
+.auth-modal .form-field {
+  gap: 6px;
+}
+.auth-modal .field-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+.auth-modal .form-field input[type='text'],
+.auth-modal .form-field input[type='email'],
+.auth-modal .form-field input[type='password'] {
+  min-height: 42px;
+  padding: 9px 12px;
+  border-radius: 6px;
+}
+.auth-modal .alert {
+  border-width: 1px;
+  border-radius: 8px;
+}
+/* conta: cabeçalho, lista de ajustes e rodapé */
+.auth-modal .account {
+  gap: 18px;
+}
+.auth-modal .account-head {
+  padding-bottom: 0;
+}
+.auth-modal .avatar.large {
+  width: 48px;
+  height: 48px;
+}
+.account-who {
+  min-width: 0;
+}
+.auth-modal .account-name {
+  font-size: 17px;
+  line-height: 22px;
+}
+.account-email {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.account-chip {
+  display: inline-block;
+  margin-top: 5px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+.auth-modal .account-section {
+  padding: 14px 0;
+}
+.auth-modal .account > form.account-section:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+.account-rows {
+  display: flex;
+  flex-direction: column;
+}
+.account-rows > .account-section:last-child {
+  border-bottom: 1px solid var(--border);
+}
+.account-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.auth-logout {
+  border: 0;
+  background: none;
+  padding: 6px 0;
+  font: inherit;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.auth-logout:hover {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.auth-logout:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 /* login com o Google */
 .google-btn {
   display: inline-flex;

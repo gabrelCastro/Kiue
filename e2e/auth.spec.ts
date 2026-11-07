@@ -27,7 +27,7 @@ test('cria conta, continua logado ao recarregar, sai e entra de novo', async ({ 
 
   await account.click();
   await expect(page.getByRole('dialog')).toContainText(email);
-  await page.getByRole('dialog').getByRole('button', { name: 'Sair', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Sair da conta', exact: true }).click();
   await expect(page.locator('.console-nav').getByRole('button', { name: 'Entrar', exact: true })).toBeVisible();
 
   // senha errada: mensagem genérica, sem dizer se o e-mail existe

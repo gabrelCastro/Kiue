@@ -72,7 +72,7 @@ test.describe('progresso na conta', () => {
 
     // sair: o navegador volta ao progresso de visitante (vazio)
     await page.locator('.console-nav .account-btn').click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Sair', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Sair da conta', exact: true }).click();
     await expect(stars).toContainText(`0 / ${TOTAL_STARS}`);
 
     await page.locator('.console-nav').getByRole('button', { name: 'Entrar', exact: true }).click();
