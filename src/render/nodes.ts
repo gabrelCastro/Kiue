@@ -14,6 +14,7 @@ import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { LAMBDA_START_CONCURRENCY, lambdaCap } from '../sim/engine';
 import type { GraphNode } from '../sim/types';
 import { bakedMaterial, bakeTree } from './bake';
+import { mergeStatic } from './merge';
 import { modelGeometry } from './models';
 import { beltTexture } from './textures';
 import { LAMBDA_DECK_H, LIFT, NODE_SCALE, QUEUE_DEPTH, QUEUE_HEIGHT, QUEUE_LEN } from './layout';
@@ -176,5 +177,9 @@ export function buildNode(node: GraphNode, isDlq: boolean, kit: ThemeKit = indus
   model.add(labelObj);
 
   bakeTree(group);
+  // partes paradas numa malha só (menos chamadas de desenho); as que mexem ou mudam de cor ficam
+  // (o corpo do consumidor e da função muda de cor, mas tem material próprio e já fica de fora)
+  mergeStatic(group, new Set<Object3D>([...spinners, ...workerPads]), pickables);
+  for (const p of pickables) p.userData.nodeId = node.id;
   return { node, group, pickables, label, spinners, workerPads, body: body!, baseColor: baseColor!, send, workers, station };
 }

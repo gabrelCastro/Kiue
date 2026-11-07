@@ -43,6 +43,7 @@ export const industria: ThemeKit = {
     const roof = part('produtor/telhado', mat(SERVICE.producer));
     const door = part('produtor/portao', mat(SCENE.metal));
     door.position.set(DOOR_AT.x, LIFT + DOOR_AT.y, DOOR_AT.z);
+    door.userData.dynamic = true; // enrola: fica fora da malha junta (merge.ts)
     model.add(
       body,
       roof,

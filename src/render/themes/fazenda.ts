@@ -203,6 +203,7 @@ export const fazenda: ThemeKit = {
     root.position.set(FARMER.x, LIFT, FARMER.z);
     root.rotation.y = Math.PI / 2;
     root.scale.setScalar(FARMER.scale);
+    root.userData.dynamic = true; // mexe os braços: fica fora da malha junta (merge.ts)
     const crate = new Mesh(new BoxGeometry(0.15, 0.11, 0.15), mat(CARDBOARD));
     crate.position.set(0, -0.06, 0.15);
     arms.add(crate);
